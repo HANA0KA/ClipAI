@@ -55,5 +55,7 @@ export function llmLabel(provider: string | null | undefined): string {
   if (!provider) return "";
   if (provider === "heuristic") return "sin IA (señales)";
   const [kind, model] = provider.split(":");
-  return kind === "gemini" ? model : kind === "openai" ? `local: ${model}` : provider;
+  if (kind === "gemini") return model;
+  if (kind === "vertex") return `${model} (Vertex)`;
+  return kind === "openai" ? `local: ${model}` : provider;
 }

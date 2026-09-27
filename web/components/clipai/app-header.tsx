@@ -39,7 +39,9 @@ function ServiceStatus() {
       : data.llmConfigured
         ? data.llm?.startsWith("openai:")
           ? `IA local: ${llmLabel(data.llm).replace("local: ", "")}`
-          : "IA: Gemini"
+          : data.llm?.startsWith("vertex:")
+            ? "IA: Gemini en Vertex"
+            : "IA: Gemini"
         : "Sin IA: respaldo por señales";
   return (
     <Tooltip>

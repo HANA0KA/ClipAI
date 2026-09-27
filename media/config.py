@@ -58,6 +58,10 @@ class Settings:
     media_port: int
     # IA
     gemini_api_key: str
+    vertex_project_id: str
+    vertex_location: str
+    google_service_account_json: str
+    google_service_account_file: str
     gemini_model: str
     gemini_fallback_models: str
     llm_base_url: str
@@ -102,8 +106,13 @@ class Settings:
         return self.data_dir / "projects"
 
     @property
+    def vertex_configured(self) -> bool:
+        return bool(self.vertex_project_id and (self.google_service_account_json
+                                                or self.google_service_account_file))
+
+    @property
     def llm_configured(self) -> bool:
-        return bool(self.llm_base_url and self.llm_model) or bool(self.gemini_api_key)
+        return bool(self.llm_base_url and self.llm_model) or self.vertex_configured or bool(self.gemini_api_key)
 
 
 def _db_path(data_dir: Path) -> Path:
@@ -122,6 +131,10 @@ def settings() -> Settings:
         media_host=_str("MEDIA_HOST", "127.0.0.1"),
         media_port=_int("MEDIA_PORT", 8000),
         gemini_api_key=_str("GEMINI_API_KEY"),
+        vertex_project_id=_str("VERTEX_PROJECT_ID"),
+        vertex_location=_str("VERTEX_LOCATION", "us-central1"),
+        google_service_account_json=_str("GOOGLE_SERVICE_ACCOUNT_JSON"),
+        google_service_account_file=str(_path(_str("GOOGLE_SERVICE_ACCOUNT_FILE"))) if _str("GOOGLE_SERVICE_ACCOUNT_FILE") else "",
         gemini_model=_str("GEMINI_MODEL", "gemini-2.5-flash"),
         gemini_fallback_models=_str("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash,gemini-3.6-flash,gemini-flash-latest,gemini-3.5-flash-lite,gemini-2.5-flash-lite"),
         llm_base_url=_str("LLM_BASE_URL").rstrip("/"),

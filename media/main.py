@@ -94,8 +94,14 @@ def health() -> dict:
     with db.connect() as conn:
         for row in conn.execute('SELECT status, COUNT(*) n FROM "Job" GROUP BY status'):
             counts[row["status"]] = row["n"]
-    llm = ("openai:" + s.llm_model) if s.llm_base_url and s.llm_model else (
-        "gemini:" + s.gemini_model if s.gemini_api_key else "heuristic")
+    if s.llm_base_url and s.llm_model:
+        llm = "openai:" + s.llm_model
+    elif s.vertex_configured:
+        llm = "vertex:" + s.gemini_model
+    elif s.gemini_api_key:
+        llm = "gemini:" + s.gemini_model
+    else:
+        llm = "heuristic"
     current = worker.current
     return {
         "ok": True,

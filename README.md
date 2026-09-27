@@ -61,7 +61,8 @@ Todas las variables están comentadas en [.env.example](.env.example). Las más 
 
 | Variable | Para qué |
 | --- | --- |
-| `GEMINI_API_KEY` | Sin ella funciona el respaldo sin IA (TextTiling + señales). También se lee del entorno del shell. |
+| `VERTEX_PROJECT_ID`, `VERTEX_LOCATION`, `GOOGLE_SERVICE_ACCOUNT_FILE` (o `_JSON`) | Gemini en Vertex AI con cuenta de servicio (rol «Vertex AI User»). Tiene prioridad sobre la API key. Vertex cobra por uso (sin capa gratuita de AI Studio). |
+| `GEMINI_API_KEY` | Gemini API de AI Studio (capa gratuita). Sin Vertex ni clave funciona el respaldo sin IA (TextTiling + señales). También se lee del entorno del shell. |
 | `GEMINI_MODEL`, `GEMINI_FALLBACK_MODELS` | Cadena de modelos: si uno responde 429/503/404 se prueba el siguiente. |
 | `LLM_BASE_URL`, `LLM_MODEL` | Ollama u otro servidor compatible con OpenAI en lugar de Gemini. |
 | `WHISPER_MODEL`, `WHISPER_DEVICE` | `small` + `cpu` sin GPU; `large-v3` + `cuda` con NVIDIA. |
@@ -112,9 +113,10 @@ cd web && npm run lint && npx tsc --noEmit
 
 - **403 o «Sign in to confirm you're not a bot»**: actualiza yt-dlp (`start.sh` lo hace
   cada semana) o define `YTDLP_COOKIES_FROM_BROWSER=chrome`.
-- **Gemini 404 «no longer available to new users»**: tu cuenta no tiene ese modelo; la
-  cadena `GEMINI_FALLBACK_MODELS` pasa al siguiente. Puedes poner
-  `GEMINI_MODEL=gemini-3.5-flash`.
+- **Gemini 404 «no longer available to new users»** (API key): tu cuenta no tiene ese
+  modelo; la cadena `GEMINI_FALLBACK_MODELS` pasa al siguiente. En Vertex
+  `gemini-2.5-flash` sí está disponible; los modelos 3.x solo existen en el endpoint
+  `global` y la app los reintenta ahí sola.
 - **npm con `ignore-scripts=true`**: `start.sh` compila solo `better-sqlite3` con
   scripts habilitados; no cambia tu configuración global.
 - Los registros del servicio están en `data/logs/media.log`.
