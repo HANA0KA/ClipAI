@@ -100,7 +100,9 @@ def _active_prefix(tpl: dict) -> str:
         box = _inline(tpl.get("box_color", "#7C3AED"))
         return f"{{\\c{hl}\\3c{box}\\bord14\\shad0}}"
     if anim == "glow":
-        return f"{{\\c{hl}\\3c{hl}\\bord3\\blur6}}"
+        # Relleno de color con contorno negro nítido y un halo suave en la sombra
+        # (\4c + \blur). Contorno del mismo color que el texto lo vuelve un bloque.
+        return f"{{\\c{hl}\\3c&H000000&\\4c{hl}\\bord6\\shad4\\blur1.5\\fscx106\\fscy106}}"
     return f"{{\\c{hl}}}"
 
 

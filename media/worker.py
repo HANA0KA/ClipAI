@@ -159,6 +159,9 @@ class Worker(threading.Thread):
                 if kind in PROJECT_JOBS:
                     db.update_project(target, stage=f"Error, reintento {job['attempts']}/{MAX_ATTEMPTS - 1} "
                                                     f"en {int(wait)} s: {str(exc)[:160]}")
+                elif kind == "render":
+                    db.update_clip(target, renderStatus="QUEUED",
+                                   renderError=f"Reintento en {int(wait)} s: {str(exc)[:300]}")
             else:
                 db.fail_job(job["id"], detail)
                 self._mark_failed(kind, target, detail)
