@@ -229,3 +229,21 @@ def has_pending_job(job_type: str, target_id: str) -> bool:
         return conn.execute(
             "SELECT 1 FROM \"Job\" WHERE type = ? AND targetId = ? AND status IN ('QUEUED', 'RUNNING') LIMIT 1",
             [job_type, target_id]).fetchone() is not None
+
+
+def requeue_job(job_id: str) -> None:
+    """De vuelta a la cola sin gastar intento (pausa del usuario)."""
+    with connect() as conn:
+        conn.execute("UPDATE \"Job\" SET status = 'QUEUED', attempts = MAX(0, attempts - 1), updatedAt = ? "
+                     "WHERE id = ?", [now_iso(), job_id])
+
+
+def reschedule_job(job_id: str, run_after: str, note: str = "") -> None:
+    """Reprograma (p. ej. límite diario del proveedor) sin gastar intento."""
+    with connect() as conn:
+        conn.execute("UPDATE \"Job\" SET status = 'QUEUED', attempts = MAX(0, attempts - 1), runAfter = ?, "
+                     "error = ?, updatedAt = ? WHERE id = ?", [run_after, note[:1000], now_iso(), job_id])
+
+
+def cancel_job(job_id: str) -> None:
+    _update("Job", job_id, {"status": "CANCELLED"})
