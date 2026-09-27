@@ -6,9 +6,10 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-success: var(--success);
+  --color-well: var(--well);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -49,72 +50,42 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* ClipAI — sala de edición: grafito azulado + ámbar de código de tiempo */
+  --background: #1b1e25;
+  --foreground: #e9eaee;
+  --card: #232730;
+  --card-foreground: #e9eaee;
+  --popover: #262a34;
+  --popover-foreground: #e9eaee;
+  --primary: #f2b441;
+  --primary-foreground: #1b1e25;
+  --secondary: #2c313c;
+  --secondary-foreground: #e9eaee;
+  --muted: #2c313c;
+  --muted-foreground: #9aa0ad;
+  --accent: #323846;
+  --accent-foreground: #e9eaee;
+  --destructive: #f0625a;
+  --success: #4cc38a;
+  --border: #343a47;
+  --input: #3a4150;
+  --ring: #f2b441;
+  --well: #14161b; /* fondo de los visores de video */
+  --chart-1: #f2b441;
+  --chart-2: #4cc38a;
+  --chart-3: #6fa8ff;
+  --chart-4: #c792ea;
+  --chart-5: #9aa0ad;
+  --radius: 0.5rem;
+  --sidebar: #1f222a;
+  --sidebar-foreground: #e9eaee;
+  --sidebar-primary: #f2b441;
+  --sidebar-primary-foreground: #1b1e25;
+  --sidebar-accent: #2c313c;
+  --sidebar-accent-foreground: #e9eaee;
+  --sidebar-border: #343a47;
+  --sidebar-ring: #f2b441;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -129,5 +100,23 @@
   }
   html {
     @apply font-sans;
+  }
+}
+@layer utilities {
+  /* Archivo variable: el eje de ancho separa títulos (condensados) del cuerpo. */
+  .font-condensed {
+    font-stretch: 72%;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
