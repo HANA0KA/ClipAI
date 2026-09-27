@@ -123,7 +123,7 @@ def settings() -> Settings:
         media_port=_int("MEDIA_PORT", 8000),
         gemini_api_key=_str("GEMINI_API_KEY"),
         gemini_model=_str("GEMINI_MODEL", "gemini-2.5-flash"),
-        gemini_fallback_models=_str("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.5-flash-lite"),
+        gemini_fallback_models=_str("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash,gemini-3.6-flash,gemini-flash-latest,gemini-3.5-flash-lite,gemini-2.5-flash-lite"),
         llm_base_url=_str("LLM_BASE_URL").rstrip("/"),
         llm_model=_str("LLM_MODEL"),
         llm_api_key=_str("LLM_API_KEY"),
