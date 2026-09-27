@@ -1,0 +1,26 @@
+{
+  "id": "neon-anton",
+  "name": "Neón condensado",
+  "description": "Anton en mayúsculas, dos palabras por vez, palabra activa verde neón con brillo.",
+  "font": "Anton",
+  "size": 96,
+  "uppercase": true,
+  "primary": "#FFFFFF",
+  "highlight": "#39FF14",
+  "outline": "#000000",
+  "outline_width": 5,
+  "shadow": 3,
+  "words_per_group": 2,
+  "max_chars": 16,
+  "margin_v": 620,
+  "animation": "glow",
+  "hook": {
+    "font": "Anton",
+    "size": 74,
+    "uppercase": true,
+    "text": "#FFFFFF",
+    "box": "#000000",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}

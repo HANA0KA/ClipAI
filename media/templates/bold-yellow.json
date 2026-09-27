@@ -1,0 +1,26 @@
+{
+  "id": "bold-yellow",
+  "name": "Amarillo audaz",
+  "description": "Montserrat ExtraBold en mayúsculas, palabra activa en amarillo con rebote.",
+  "font": "Montserrat ExtraBold",
+  "size": 84,
+  "uppercase": true,
+  "primary": "#FFFFFF",
+  "highlight": "#FFE600",
+  "outline": "#000000",
+  "outline_width": 6,
+  "shadow": 2,
+  "words_per_group": 3,
+  "max_chars": 18,
+  "margin_v": 600,
+  "animation": "pop",
+  "hook": {
+    "font": "Montserrat ExtraBold",
+    "size": 62,
+    "uppercase": true,
+    "text": "#111111",
+    "box": "#FFE600",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}

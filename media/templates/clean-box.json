@@ -1,0 +1,27 @@
+{
+  "id": "clean-box",
+  "name": "Caja limpia",
+  "description": "Texto blanco en minúsculas naturales; la palabra activa lleva una caja morada.",
+  "font": "Montserrat ExtraBold",
+  "size": 76,
+  "uppercase": false,
+  "primary": "#FFFFFF",
+  "highlight": "#FFFFFF",
+  "outline": "#000000",
+  "outline_width": 5,
+  "shadow": 0,
+  "words_per_group": 3,
+  "max_chars": 20,
+  "margin_v": 600,
+  "animation": "box",
+  "box_color": "#7C3AED",
+  "hook": {
+    "font": "Montserrat ExtraBold",
+    "size": 58,
+    "uppercase": false,
+    "text": "#FFFFFF",
+    "box": "#7C3AED",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}
