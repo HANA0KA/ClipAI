@@ -1,0 +1,8 @@
+{"wireMagic":"pb3","pens":[{}],"wsWinStyles":[{}],"wpWinPositions":[{}],
+ "events":[
+  {"tStartMs":0,"dDurationMs":5000,"id":1,"wpWinPosId":1,"wsWinStyleId":1},
+  {"tStartMs":100,"dDurationMs":2900,"wWinId":1,"segs":[{"utf8":"hola","acAsrConf":0},{"utf8":" a","tOffsetMs":400},{"utf8":" todos","tOffsetMs":700}]},
+  {"tStartMs":1900,"dDurationMs":1100,"wWinId":1,"aAppend":1,"segs":[{"utf8":"\n"}]},
+  {"tStartMs":1900,"dDurationMs":3000,"wWinId":1,"segs":[{"utf8":"[Música]"}]},
+  {"tStartMs":3000,"dDurationMs":2000,"wWinId":1,"segs":[{"utf8":"hoy"},{"utf8":" vamos","tOffsetMs":300},{"utf8":" a","tOffsetMs":600},{"utf8":" aprender","tOffsetMs":800}]}
+ ]}

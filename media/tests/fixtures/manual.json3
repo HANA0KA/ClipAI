@@ -1,0 +1,4 @@
+{"events":[
+  {"tStartMs":0,"dDurationMs":2000,"segs":[{"utf8":"Esto es una frase."}]},
+  {"tStartMs":2500,"dDurationMs":1500,"segs":[{"utf8":"¿Y ahora qué?"}]}
+]}
