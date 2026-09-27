@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import time
 from pathlib import Path
 
 from media.config import settings
@@ -35,8 +36,10 @@ FORMAT_LADDER = (
 )
 
 # Cadena de clientes de ClipPyMe (`_DEFAULT_PLAYER_CLIENTS`): si YouTube
-# responde 403 o sin formatos con el cliente por defecto, se prueba otro.
-PLAYER_CLIENT_CHAIN = (None, ["tv", "tv_embedded"], ["web_safari"])
+# responde 403 o sin formatos con el cliente por defecto, se prueba otro. El
+# cliente por defecto se repite una vez: el 403 del primer pedido suele ser
+# transitorio (medido: el segundo intento descarga bien).
+PLAYER_CLIENT_CHAIN = (None, None, ["tv", "tv_embedded"], ["web_safari"])
 
 _YT_RE = re.compile(r"^(https?://)?(www\.|m\.|music\.)?(youtube\.com|youtu\.be)/", re.IGNORECASE)
 
@@ -131,7 +134,8 @@ def _download_youtube(project: dict, folder: Path) -> dict:
                                      "YTDLP_COOKIES_FROM_BROWSER=chrome (o tu navegador) en .env y reintenta.") from exc
             if attempt == len(PLAYER_CLIENT_CHAIN) - 1:
                 raise
-            log.warning("descarga falló con el cliente %s (%s); pruebo otro", clients or "por defecto", msg[:160])
+            log.warning("descarga falló con el cliente %s (%s); pruebo de nuevo", clients or "por defecto", msg[:160])
+            time.sleep(3)
             for part in folder.glob("source.*.part"):
                 part.unlink(missing_ok=True)
     if state.get("rejected"):

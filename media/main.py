@@ -147,6 +147,10 @@ def project_control(project_id: str, body: ControlIn) -> dict:
         raise _err(exc, 404 if "no existe" in str(exc) else 400)
 
 
+def _has_pending_renders(project_id: str) -> bool:
+    return any(db.has_pending_job("render", c["id"]) for c in db.list_clips(project_id))
+
+
 def _cleanup_project(project: dict) -> int:
     """«Limpiar»: borra source.mp4 y audio.wav (los trozos de cada clip se
     conservan para poder re-renderizar)."""
@@ -168,6 +172,8 @@ def cleanup_project(project_id: str) -> dict:
         raise HTTPException(404, "Proyecto no encontrado")
     if project["status"] not in ("READY", "STOPPED", "FAILED"):
         raise HTTPException(409, "Solo se limpian proyectos terminados")
+    if _has_pending_renders(project_id) or worker.current_project == project_id:
+        raise HTTPException(409, "Espera a que terminen sus renders antes de limpiar")
     return {"freedMb": round(_cleanup_project(project) / 1024 ** 2, 1)}
 
 
@@ -176,7 +182,7 @@ def cleanup_all() -> dict:
     freed, n = 0, 0
     for p in db.list_projects():
         if p["status"] in ("READY", "STOPPED", "FAILED") and not p["sourceDeleted"]:
-            if worker.current_project == p["id"]:
+            if worker.current_project == p["id"] or _has_pending_renders(p["id"]):
                 continue
             freed += _cleanup_project(p)
             n += 1
