@@ -27,9 +27,12 @@ def _faster_whisper():
     with _lock:
         if _model is None or _model_key != key:
             from faster_whisper import WhisperModel
-            _model = WhisperModel(s.whisper_model, device=s.whisper_device,
-                                  compute_type=s.whisper_compute_type,
-                                  cpu_threads=max(1, (os.cpu_count() or 4) - 2))
+            opts = dict(device=s.whisper_device, compute_type=s.whisper_compute_type,
+                        cpu_threads=max(1, (os.cpu_count() or 4) - 2))
+            try:  # caché local primero: sin consultas a Hugging Face en cada arranque
+                _model = WhisperModel(s.whisper_model, local_files_only=True, **opts)
+            except Exception:  # primera vez: se descarga
+                _model = WhisperModel(s.whisper_model, **opts)
             _model_key = key
         return _model
 

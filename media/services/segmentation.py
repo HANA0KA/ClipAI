@@ -28,7 +28,11 @@ def _encoder():
     with _model_lock:
         if _model is None:
             from sentence_transformers import SentenceTransformer
-            _model = SentenceTransformer(settings().embeddings_model, device="cpu")
+            name = settings().embeddings_model
+            try:  # caché local primero: sin consultas a Hugging Face en cada arranque
+                _model = SentenceTransformer(name, device="cpu", local_files_only=True)
+            except Exception:  # primera vez: se descarga
+                _model = SentenceTransformer(name, device="cpu")
         return _model
 
 

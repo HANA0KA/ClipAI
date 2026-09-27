@@ -109,7 +109,11 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 say "Servicio de procesamiento en http://127.0.0.1:$MEDIA_PORT"
-.venv/bin/uvicorn media.main:app --host 127.0.0.1 --port "$MEDIA_PORT" --log-level warning &
+# MediaPipe (C++/absl) escribe avisos de arranque inofensivos en stderr que no se
+# pueden silenciar desde Python; se filtran solo esas líneas conocidas.
+MEDIAPIPE_NOISE='^(WARNING: All log messages before absl::InitializeLog|[IW][0-9]{4} [0-9:.]+ +[0-9]+ (gl_context|inference_feedback_manager)\.cc|INFO: Created TensorFlow Lite XNNPACK delegate)'
+.venv/bin/uvicorn media.main:app --host 127.0.0.1 --port "$MEDIA_PORT" --log-level warning \
+  2> >(grep --line-buffered -vE "$MEDIAPIPE_NOISE" >&2) &
 pids+=($!)
 
 say "Interfaz en http://127.0.0.1:$WEB_PORT"

@@ -119,6 +119,9 @@ cd web && npm run lint && npx tsc --noEmit
   `global` y la app los reintenta ahí sola.
 - **npm con `ignore-scripts=true`**: `start.sh` compila solo `better-sqlite3` con
   scripts habilitados; no cambia tu configuración global.
+- **Avisos de Hugging Face o MediaPipe en la terminal**: son inofensivos. Los modelos se
+  cargan desde la caché local tras la primera descarga y `start.sh` filtra los avisos de
+  arranque de MediaPipe.
 - Los registros del servicio están en `data/logs/media.log`.
 
 ## Aviso

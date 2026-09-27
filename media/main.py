@@ -9,6 +9,7 @@ Next.js (web/) es quien crea proyectos y clips en SQLite; aquí se procesan.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -25,6 +26,9 @@ from media.errors import PermanentError
 from media.services import ass_builder, db, publisher
 from media.services.ffmpeg import ffmpeg_bin, has_libass
 from media.worker import CLIP_JOBS, PROJECT_JOBS, Worker, control_project
+
+# Sin barras de progreso de Hugging Face en la terminal (la UI ya muestra el avance).
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 
 def _setup_logging() -> None:
