@@ -10,6 +10,7 @@ Después, pulido con Whisper de los clips elegidos (plan 6.2) → captions.json.
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter
 from pathlib import Path
 
@@ -239,6 +240,8 @@ def run_task(project_id: str, payload: dict) -> None:
         llm = LLM()
         result = select_moments(project, folder, data, llm, stage)
         write_json(analysis_path, result)
+        for old in existing:  # nuevo análisis: fuera los clips anteriores y sus archivos
+            shutil.rmtree(folder / "clips" / old["id"], ignore_errors=True)
         db.delete_clips(project_id)
         clips = []
         for c in result["clips"]:
