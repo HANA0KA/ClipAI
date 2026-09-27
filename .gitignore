@@ -1,0 +1,29 @@
+# Secretos y datos locales — nunca a git
+.env
+.env.*
+!.env.example
+data/
+
+# Repos de referencia (tienen su propio .git)
+REFERENCIAS CLIPPING/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+media/models/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+web/lib/generated/
+*.tsbuildinfo
+
+# Varios
+.DS_Store
+*.log
+logs/
