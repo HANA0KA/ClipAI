@@ -6,8 +6,6 @@
 - **Cada clip dura lo que su historia necesita** (gancho → contexto → desarrollo → remate), entre 1:00 y 2:30, sin relleno.
 - **Funciona sin pagar nada y con el proveedor que prefieras:** una clave de Gemini (capa gratuita), cualquier servicio compatible con OpenAI (OpenAI, OpenRouter, Groq, DeepSeek, Mistral…), un modelo local con Ollama, o incluso sin IA (modo de respaldo por heurísticas). Vertex AI es solo una opción más.
 
-![Pantalla de inicio de ClipAI](docs/img/inicio.png)
-
 ### Míralo en 1 minuto
 
 https://github.com/user-attachments/assets/8ab54fbb-1c51-4c4a-b799-f0b1a68a1b40
