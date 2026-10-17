@@ -1,0 +1,33 @@
+{
+  "id": "podcast",
+  "name": "Pódcast",
+  "description": "Sobrio para entrevistas: caja oscura, palabra activa en dorado y entrada suave.",
+  "font": "Montserrat ExtraBold",
+  "size": 70,
+  "uppercase": false,
+  "primary": "#FFFFFF",
+  "highlight": "#FFB800",
+  "emphasis": "#FFB800",
+  "outline": "#000000",
+  "outline_width": 0,
+  "shadow": 0,
+  "background": "#1A1A1A",
+  "background_alpha": 51,
+  "background_pad": 16,
+  "words_per_group": 4,
+  "max_chars": 24,
+  "margin_v": 580,
+  "animation": "color",
+  "entrance": "fade",
+  "emoji": false,
+  "hook": {
+    "font": "Montserrat ExtraBold",
+    "size": 56,
+    "uppercase": false,
+    "text": "#FFFFFF",
+    "box": "#1A1A1A",
+    "accent": "#FFB800",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}

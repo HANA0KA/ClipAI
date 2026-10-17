@@ -59,3 +59,12 @@ export function llmLabel(provider: string | null | undefined): string {
   if (kind === "vertex") return `${model} (Vertex)`;
   return kind === "openai" ? `local: ${model}` : provider;
 }
+
+/** Costo de IA del proyecto: «≈ US$0,012 · 38 mil tokens». */
+export function aiUsage(usd: number, tokens: number, estimated: boolean, provider: string | null): string {
+  const k = tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)} M` : `${Math.max(1, Math.round(tokens / 1000))} mil`;
+  if (provider?.startsWith("openai:") && usd === 0) return `IA local · ${k} tokens`;
+  const money = usd < 0.01 ? usd.toFixed(4) : usd.toFixed(3);
+  return `IA ${estimated ? "≈ " : ""}US$${money.replace(".", ",")} · ${k} tokens`;
+}
+

@@ -4,9 +4,9 @@ import type { LayoutMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const OPTIONS: { value: LayoutMode; label: string; hint: string; glyph: React.ReactNode }[] = [
-  { value: "auto", label: "Automático", hint: "Elige el mejor diseño en cada escena", glyph: <span className="text-[10px] font-bold">A</span> },
+  { value: "auto", label: "Automático", hint: "Elige el mejor diseño en cada escena y sigue a quien se mueve", glyph: <span className="text-[10px] font-bold">A</span> },
   {
-    value: "track", label: "Una persona", hint: "Recorte fijo sobre el rostro que habla",
+    value: "track", label: "Una persona", hint: "Recorte sobre el rostro que habla; si camina, la cámara lo sigue",
     glyph: <span className="size-2.5 rounded-full bg-current" />,
   },
   {

@@ -1,6 +1,6 @@
-"""Transcripción local con marcas por palabra (plan 6.2).
+"""Transcripción local con marcas por palabra.
 
-faster-whisper por defecto (CPU/Apple Silicon, `small` + `int8`); WhisperX si
+faster-whisper por defecto (CPU/Apple Silicon, `large-v3-turbo` + `int8`); WhisperX si
 WHISPER_ENGINE=whisperx y está instalado (GPU NVIDIA, alineación forzada).
 El modelo se carga una sola vez por proceso.
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from media.config import settings
+from media.services.transcript import merge_continuations
 
 log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -48,16 +49,16 @@ def transcribe(wav: Path, language: str | None = None,
     model = _faster_whisper()
     segments, info = model.transcribe(str(wav), language=language or None, word_timestamps=True,
                                       vad_filter=True, beam_size=5, condition_on_previous_text=False)
-    words: list[dict] = []
+    tokens: list[dict] = []
     total = float(getattr(info, "duration", 0) or 0)
     for seg in segments:
         for w in seg.words or []:
-            text = (w.word or "").strip()
-            if text:
-                words.append({"w": text, "start": round(float(w.start), 3), "end": round(float(w.end), 3)})
+            if (w.word or "").strip():
+                # Sin limpiar: el espacio delante marca dónde empieza una palabra.
+                tokens.append({"w": w.word, "start": round(float(w.start), 3), "end": round(float(w.end), 3)})
         if progress and total > 0:
             progress(min(1.0, float(seg.end) / total))
-    return words, (info.language or language or "es")
+    return merge_continuations(tokens), (info.language or language or "es")
 
 
 def _transcribe_whisperx(wav: Path, language: str | None) -> tuple[list[dict], str]:

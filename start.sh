@@ -55,7 +55,7 @@ if [ "$INSTALL" = 1 ]; then
     hash_of media/requirements.txt > .venv/.req-hash
     date +%s > .venv/.ytdlp-updated
   fi
-  # yt-dlp cambia a menudo porque YouTube cambia: actualizarlo cada semana (plan 6.1).
+  # yt-dlp cambia a menudo porque YouTube cambia: actualizarlo cada semana.
   last=$(cat .venv/.ytdlp-updated 2>/dev/null || echo 0)
   if [ $(( $(date +%s) - last )) -gt 604800 ]; then
     say "Actualizando yt-dlp (semanal)"

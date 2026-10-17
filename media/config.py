@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 MEDIA_DIR = ROOT_DIR / "media"
-FONTS_DIR = MEDIA_DIR / "fonts"
+FONTS_DIR = MEDIA_DIR / "fonts"  # fuentes incluidas (OFL)
 TEMPLATES_DIR = MEDIA_DIR / "templates"
 
 load_dotenv(ROOT_DIR / ".env", override=False)
@@ -80,6 +80,7 @@ class Settings:
     max_clips: int
     clip_min_sec: float
     clip_max_sec: float
+    auto_cold_open: bool
     prefilter_top: int
     auto_render: bool
     max_video_minutes: int
@@ -92,18 +93,33 @@ class Settings:
     x264_preset: str
     target_lufs: float
     ken_burns_zoom: float
+    render_nice: int
+    subtitle_templates_auto: str
+    trending_topics: str
+    trending_lang: str
+    # Hashtags del canal
+    hashtags_base: str
+    hashtags_creator: bool
+    hashtags_format: str
     # Descarga
     ytdlp_cookies_from_browser: str
     # Publicación
     upload_post_api_key: str
     upload_post_user: str
-    tiktok_client_key: str
-    tiktok_client_secret: str
-    tiktok_redirect_uri: str
 
     @property
     def projects_dir(self) -> Path:
         return self.data_dir / "projects"
+
+    @property
+    def cache_dir(self) -> Path:
+        """Caché compartida entre proyectos (transcripciones, análisis, emojis)."""
+        return self.data_dir / "cache"
+
+    @property
+    def user_fonts_dir(self) -> Path:
+        """Fuentes que libass ve: las incluidas (enlazadas) más las que subes."""
+        return self.data_dir / "fonts"
 
     @property
     def vertex_configured(self) -> bool:
@@ -122,9 +138,23 @@ def _db_path(data_dir: Path) -> Path:
     return data_dir / "app.db"
 
 
+# Duración máxima absoluta de un clip (2:30). Ningún ajuste la supera.
+CLIP_ABSOLUTE_MAX_SEC = 150.0
+
+
+def _clip_limits() -> tuple[float, float]:
+    """Duración de los clips: la decide la historia de cada uno entre
+    CLIP_MIN_SEC y CLIP_MAX_SEC (tope absoluto 150 s). Tolera valores
+    invertidos o fuera de rango en el .env."""
+    hi = min(CLIP_ABSOLUTE_MAX_SEC, max(10.0, _float("CLIP_MAX_SEC", CLIP_ABSOLUTE_MAX_SEC)))
+    lo = min(hi, max(5.0, _float("CLIP_MIN_SEC", 60.0)))
+    return lo, hi
+
+
 @lru_cache(maxsize=1)
 def settings() -> Settings:
     data_dir = _path(_str("DATA_DIR", "./data"))
+    clip_min, clip_max = _clip_limits()
     return Settings(
         data_dir=data_dir,
         db_path=_db_path(data_dir),
@@ -135,22 +165,23 @@ def settings() -> Settings:
         vertex_location=_str("VERTEX_LOCATION", "us-central1"),
         google_service_account_json=_str("GOOGLE_SERVICE_ACCOUNT_JSON"),
         google_service_account_file=str(_path(_str("GOOGLE_SERVICE_ACCOUNT_FILE"))) if _str("GOOGLE_SERVICE_ACCOUNT_FILE") else "",
-        gemini_model=_str("GEMINI_MODEL", "gemini-2.5-flash"),
-        gemini_fallback_models=_str("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash,gemini-3.6-flash,gemini-flash-latest,gemini-3.5-flash-lite,gemini-2.5-flash-lite"),
+        gemini_model=_str("GEMINI_MODEL", "gemini-3-flash-preview"),
+        gemini_fallback_models=_str("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-3.5-flash,gemini-3.6-flash,gemini-flash-latest,gemini-3.5-flash-lite,gemini-2.5-flash-lite"),
         llm_base_url=_str("LLM_BASE_URL").rstrip("/"),
         llm_model=_str("LLM_MODEL"),
         llm_api_key=_str("LLM_API_KEY"),
         embeddings_enabled=_bool("EMBEDDINGS_ENABLED", True),
         embeddings_model=_str("EMBEDDINGS_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"),
         whisper_engine=_str("WHISPER_ENGINE", "faster-whisper").lower(),
-        whisper_model=_str("WHISPER_MODEL", "small"),
+        whisper_model=_str("WHISPER_MODEL", "large-v3-turbo"),
         whisper_device=_str("WHISPER_DEVICE", "cpu"),
         whisper_compute_type=_str("WHISPER_COMPUTE_TYPE", "int8"),
         polish_with_whisper=_bool("POLISH_WITH_WHISPER", True),
         hf_token=_str("HF_TOKEN"),
         max_clips=max(1, _int("MAX_CLIPS", 8)),
-        clip_min_sec=_float("CLIP_MIN_SEC", 30.0),
-        clip_max_sec=_float("CLIP_MAX_SEC", 90.0),
+        clip_min_sec=clip_min,
+        clip_max_sec=clip_max,
+        auto_cold_open=_bool("AUTO_COLD_OPEN", True),
         prefilter_top=max(1, _int("PREFILTER_TOP", 30)),
         auto_render=_bool("AUTO_RENDER", True),
         max_video_minutes=_int("MAX_VIDEO_MINUTES", 240),
@@ -162,12 +193,16 @@ def settings() -> Settings:
         x264_preset=_str("X264_PRESET", "medium"),
         target_lufs=_float("TARGET_LUFS", -14.0),
         ken_burns_zoom=_float("KEN_BURNS_ZOOM", 1.05),
+        render_nice=min(19, max(0, _int("RENDER_NICE", 10))),
+        subtitle_templates_auto=_str("SUBTITLE_TEMPLATES_AUTO"),
+        trending_topics=_str("TRENDING_TOPICS", "podcast,entrevista,debate,streamer,reacción,humor,historias,noticias"),
+        trending_lang=_str("TRENDING_LANG", "es"),
+        hashtags_base=_str("HASHTAGS_BASE", "#YoutubersEspañoles #Streamers"),
+        hashtags_creator=_bool("HASHTAGS_CREATOR", True),
+        hashtags_format=_str("HASHTAGS_FORMAT", "#Clips"),
         ytdlp_cookies_from_browser=_str("YTDLP_COOKIES_FROM_BROWSER"),
         upload_post_api_key=_str("UPLOAD_POST_API_KEY"),
         upload_post_user=_str("UPLOAD_POST_USER"),
-        tiktok_client_key=_str("TIKTOK_CLIENT_KEY"),
-        tiktok_client_secret=_str("TIKTOK_CLIENT_SECRET"),
-        tiktok_redirect_uri=_str("TIKTOK_REDIRECT_URI", "http://127.0.0.1:3000/api/tiktok/callback"),
     )
 
 

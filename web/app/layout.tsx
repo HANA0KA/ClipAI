@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { Anton, Archivo, Montserrat } from "next/font/google";
+import { Anton, Bricolage_Grotesque, DM_Sans, Montserrat } from "next/font/google";
 import { AppHeader } from "@/components/clipai/app-header";
 import { Providers } from "./providers";
 import "./globals.css";
 
-// Una sola familia para la interfaz: Archivo variable (el eje de ancho separa
-// títulos condensados del cuerpo). Montserrat y Anton solo para previsualizar
+// Tipografía de cojeev-ui: Bricolage Grotesque para títulos (su eje de ancho los
+// condensa) y DM Sans para la interfaz. Montserrat y Anton solo para previsualizar
 // las plantillas de subtítulos tal como se queman en el video.
-const archivo = Archivo({ subsets: ["latin"], variable: "--font-sans", axes: ["wdth"] });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage", axes: ["opsz", "wdth"] });
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dmsans", axes: ["opsz"] });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["800"], variable: "--font-montserrat" });
 const anton = Anton({ subsets: ["latin"], weight: ["400"], variable: "--font-anton" });
 
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es" className={`dark ${archivo.variable} ${montserrat.variable} ${anton.variable} h-full antialiased`}>
+    <html lang="es" data-mode="dark" className={`dark ${bricolage.variable} ${dmSans.variable} ${montserrat.variable} ${anton.variable} h-full antialiased`}>
       <body className="min-h-full bg-background text-foreground">
         <Providers>
           <AppHeader />

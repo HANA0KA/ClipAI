@@ -95,6 +95,19 @@ def list_projects() -> list[dict]:
         return [dict(r) for r in conn.execute('SELECT * FROM "Project" ORDER BY createdAt DESC')]
 
 
+def add_ai_usage(project_id: str, usage: dict | None) -> None:
+    """Suma tokens y costo estimado de IA al proyecto (análisis, ganchos…)."""
+    if not usage or not usage.get("calls"):
+        return
+    tokens = int(usage.get("prompt_tokens", 0)) + int(usage.get("output_tokens", 0)) + \
+        int(usage.get("thinking_tokens", 0))
+    with connect() as conn:
+        conn.execute('UPDATE "Project" SET aiCostUsd = aiCostUsd + ?, aiTokens = aiTokens + ?, '
+                     'aiCostEstimated = MAX(aiCostEstimated, ?), updatedAt = ? WHERE id = ?',
+                     [float(usage.get("cost_usd", 0.0)), tokens, 1 if usage.get("estimated") else 0,
+                      now_iso(), project_id])
+
+
 def delete_project(project_id: str) -> None:
     with connect() as conn:
         conn.execute('DELETE FROM "Project" WHERE id = ?', [project_id])
@@ -103,9 +116,9 @@ def delete_project(project_id: str) -> None:
 # ── Clip ─────────────────────────────────────────────────────────────────────
 
 CLIP_INSERT_FIELDS = (
-    "rank", "startSec", "endSec", "score", "reason", "hook", "title", "description",
-    "hashtags", "templateId", "captionsPath", "topic", "bestLine", "bestLineStart",
-    "bestLineEnd", "signals", "layoutMode",
+    "rank", "startSec", "endSec", "score", "reason", "hook", "hookType", "title", "description",
+    "hashtags", "hashtagSets", "templateId", "captionsPath", "topic", "bestLine", "bestLineStart",
+    "bestLineEnd", "prependBestLine", "signals", "layoutMode", "edit",
 )
 
 
@@ -213,6 +226,15 @@ def cancel_jobs(target_ids: list[str]) -> int:
         cur = conn.execute(
             f"UPDATE \"Job\" SET status = 'CANCELLED', updatedAt = ? "
             f"WHERE targetId IN ({marks}) AND status IN ('QUEUED')", [now_iso(), *target_ids])
+        return cur.rowcount
+
+
+def cancel_jobs_of_type(job_type: str, target_id: str) -> int:
+    """Cancela los jobs EN COLA de un tipo para un objetivo."""
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE \"Job\" SET status = 'CANCELLED', updatedAt = ? "
+            "WHERE type = ? AND targetId = ? AND status = 'QUEUED'", [now_iso(), job_type, target_id])
         return cur.rowcount
 
 

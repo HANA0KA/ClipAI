@@ -1,7 +1,6 @@
 """Escrituras atómicas: tmp en el mismo directorio + fsync + os.replace.
 
-Patrón de ClipPyMe (`domain/runtime_state.py`, `domain/job_artifacts.py`),
-reescrito: un corte de luz a mitad de escritura deja el archivo anterior intacto,
+Un corte de luz a mitad de escritura deja el archivo anterior intacto,
 así los puntos de control de cada fase son fiables.
 """
 from __future__ import annotations

@@ -1,6 +1,4 @@
-"""Revisión previa antes de gastar (plan 6.8): duración, disco y tokens.
-
-Idea de ClipPyMe `pipeline/preflight.py`, reescrita a lo que usa ClipAI.
+"""Revisión previa antes de gastar: duración, disco y tokens.
 """
 from __future__ import annotations
 

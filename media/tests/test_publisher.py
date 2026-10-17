@@ -10,15 +10,6 @@ from media.services import publisher
 MB = 1024 * 1024
 
 
-def test_chunk_plan_follows_tiktok_rules():
-    assert publisher.chunk_plan(3 * MB) == (3 * MB, 1)          # < 5 MB: entero
-    assert publisher.chunk_plan(40 * MB) == (40 * MB, 1)        # ≤ 64 MB: un trozo
-    chunk, count = publisher.chunk_plan(150 * MB)                # > 64 MB: varios
-    assert 5 * MB <= chunk <= 64 * MB and count == 15
-    last = 150 * MB - chunk * (count - 1)
-    assert chunk <= last <= 128 * MB
-
-
 def test_next_day_is_utc_and_in_future():
     iso = next_day_iso()
     assert iso.endswith("+00:00")

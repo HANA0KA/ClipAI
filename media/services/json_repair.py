@@ -1,4 +1,4 @@
-"""Lectura tolerante de respuestas JSON de un LLM (plan 6.8).
+"""Lectura tolerante de respuestas JSON de un LLM.
 
 Adaptado de ClipPyMe — https://github.com/fralapo/clippyme
 Ruta original: src/clippyme/pipeline/gemini_parser.py

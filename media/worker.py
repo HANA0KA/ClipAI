@@ -1,4 +1,4 @@
-"""Cola local: un único hilo de trabajo sobre la tabla Job de SQLite (plan 2 y 6.8).
+"""Cola local: un único hilo de trabajo sobre la tabla Job de SQLite.
 
 * Un job a la vez, en orden de llegada; `runAfter` permite esperas.
 * Fases de proyecto encadenadas: download → transcribe → analyze. Cada tarea
@@ -26,7 +26,7 @@ log = logging.getLogger("media.worker")
 
 MAX_ATTEMPTS = 3
 PROJECT_JOBS = ("download", "transcribe", "analyze")
-CLIP_JOBS = ("render", "tiktok_draft", "publish")
+CLIP_JOBS = ("render", "publish")
 NEXT_PHASE = {"download": "transcribe", "transcribe": "analyze"}
 PHASE_STATUS = {"download": "DOWNLOADING", "transcribe": "TRANSCRIBING", "analyze": "ANALYZING"}
 
@@ -41,7 +41,7 @@ def _handlers():
     }
     try:
         from media.tasks import publish
-        handlers.update(tiktok_draft=publish.run_tiktok_draft, publish=publish.run_publish)
+        handlers.update(publish=publish.run_publish)
     except ImportError:  # publicación opcional
         pass
     return handlers
@@ -190,7 +190,7 @@ class Worker(threading.Thread):
             return
         db.cancel_job(job["id"])
         if job["type"] == "render":
-            db.update_clip(job["targetId"], renderStatus="NONE")
+            restore_render_status(job["targetId"])
         log.info("⏹ %s %s detenido (%s)", job["type"], job["targetId"], reason)
 
     @staticmethod
@@ -198,9 +198,40 @@ class Worker(threading.Thread):
         if kind in PROJECT_JOBS:
             db.update_project(target, status="FAILED", error=message[:2000], stage=f"Falló: {kind}")
         elif kind == "render":
-            db.update_clip(target, renderStatus="FAILED", renderError=message[:2000])
+            db.update_clip(target, renderStatus="FAILED", renderError=message[:2000], renderProgress=0)
         else:
             db.update_clip(target, publishStatus="FAILED", publishInfo=json.dumps({"error": message[:1000]}))
+
+
+def restore_render_status(clip_id: str) -> None:
+    """Tras cancelar un render: si ya había un MP4 (se escribe en un temporal,
+    así que sigue intacto) el clip vuelve a DONE; si no, a NONE."""
+    clip = db.get_clip(clip_id)
+    if clip is None:
+        return
+    done = bool(clip.get("outputPath")) and (settings().data_dir / clip["outputPath"]).exists()
+    db.update_clip(clip_id, renderStatus="DONE" if done else "NONE", renderProgress=100 if done else 0,
+                   renderError=None)
+
+
+def cancel_render(worker: Worker, clip_id: str) -> dict:
+    """Cancela el render en cola o en curso de un clip."""
+    from media.services import cancel
+    clip = db.get_clip(clip_id)
+    if clip is None:
+        raise PermanentError("El clip no existe.")
+    current = worker.current
+    if current and current["type"] == "render" and current["targetId"] == clip_id:
+        cancel.request(cancel.render_key(clip_id))  # el render lo ve en el próximo cuadro
+        return {"status": "CANCELLING"}
+    if db.cancel_jobs_of_type("render", clip_id):
+        restore_render_status(clip_id)
+    elif db.has_pending_job("render", clip_id):
+        # El hilo lo acaba de tomar (entre la consulta y ahora): se marca igual.
+        cancel.request(cancel.render_key(clip_id))
+        return {"status": "CANCELLING"}
+    fresh = db.get_clip(clip_id)
+    return {"status": fresh["renderStatus"] if fresh else "NONE"}
 
 
 def control_project(worker: Worker, project_id: str, action: str) -> dict:
@@ -225,7 +256,7 @@ def control_project(worker: Worker, project_id: str, action: str) -> dict:
         for cid in clip_ids:
             c = db.get_clip(cid)
             if c and c["renderStatus"] == "QUEUED":
-                db.update_clip(cid, renderStatus="NONE")
+                restore_render_status(cid)
         status = "READY" if clip_ids and project["status"] in ("READY", "PAUSED") else "STOPPED"
         db.update_project(project_id, status=status, stage="Detenido; se conserva lo hecho")
     elif action == "discard":

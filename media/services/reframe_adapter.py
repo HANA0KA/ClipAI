@@ -1,6 +1,6 @@
-"""Reencuadre 9:16 — contrato propio, implementación prestada (plan 6.0 y 6.4).
+"""Reencuadre 9:16 — contrato propio, implementación prestada.
 
-Única puerta hacia `media/vendor/clippyme_reframe` (ClipPyMe, MIT). Además
+Única puerta hacia `media/vendor/reframe` (ClipPyMe, MIT). Además
 porta el diseño SPLIT y el hablante activo de OpenShorts:
 
 Adaptado de OpenShorts — https://github.com/mutonby/openshorts
@@ -14,9 +14,10 @@ Cambios: SPLIT se compone por cuadro en numpy dentro del mismo pase de render
 WIDE; no se aplica a planos de público (3+ rostros grandes); el hablante
 activo se mide durante el pase de rastreo.
 
-Diseños por escena: TRACK (un rostro, recorte fijo), SPLIT (dos rostros en ≥50 %
-de los cuadros, apilados), WIDE (varios rostros o sujeto que se mueve, recorte
-abierto fijo), GENERAL (sin rostros: video centrado sobre fondo desenfocado).
+Diseños por escena: TRACK (un rostro, recorte fijo), FOLLOW (un sujeto que se
+mueve: la cámara lo sigue con paneo suave), SPLIT (dos rostros en ≥50 % de los
+cuadros, apilados), WIDE (varios rostros, recorte abierto fijo), GENERAL (sin
+rostros: video centrado sobre fondo desenfocado).
 """
 from __future__ import annotations
 
@@ -30,11 +31,15 @@ import numpy as np
 
 from media.services import layout_ranges
 from media.services.atomic import write_json
-from media.services.ffmpeg import ffmpeg_bin, ffprobe_bin, video_args
+from media.services.ffmpeg import ffmpeg_bin, ffprobe_bin, lower_priority, video_args
 
 log = logging.getLogger(__name__)
 
 MODES = ("auto", "track", "split", "wide", "off")
+# Sube cuando cambia el encuadre automático: invalida la caché de reencuadre de
+# los clips (render.py la incluye en su clave). 2 = cámara que sigue (FOLLOW) y
+# solo detecciones confirmadas.
+ENGINE_VERSION = 2
 
 
 @dataclass
@@ -44,7 +49,7 @@ class ReframeResult:
     scenes: list = field(default_factory=list)  # detalle por escena (crop.json)
 
 
-# ── SPLIT (OpenShorts split_layout.py) ───────────────────────────────────────
+# ── SPLIT ────────────────────────────────────────────────────
 
 MIN_COEXISTENCE = 0.5     # fracción de cuadros con AMBOS rostros (dos-shot real)
 MIN_SEPARATION = 0.20     # separación horizontal mínima entre rostros
@@ -224,7 +229,7 @@ def compose_split(frame, top_geo, bottom_geo, out_w, out_h, resize):
     return out
 
 
-# ── Hablante activo (OpenShorts active_speaker.py) ───────────────────────────
+# ── Hablante activo ────────────────────────────────────────
 
 WINDOW_SECONDS = 0.4
 AUDIO_FLOOR = 0.18
@@ -361,16 +366,21 @@ def _merge_ranges(ranges):
 
 
 def reframe(source_slice: Path, output: Path, mode: str = "auto", *, width: int = 1080,
-            height: int = 1920) -> ReframeResult:
+            height: int = 1920, on_progress=None, cancelled=None) -> ReframeResult:
     """mode: auto | track | split | wide | off.
 
-    Llama al render de ClipPyMe (análisis por escena + cámara quieta) y añade
-    el diseño SPLIT portado de OpenShorts cuando hay dos rostros. Escribe
-    ``output`` (H.264 1080×1920 con el audio original) y su sidecar
+    Llama al render de reencuadre (análisis por escena + cámara quieta) y añade
+    el diseño SPLIT cuando hay dos rostros. Escribe
+    ``output`` (H.264 ``width``×``height`` con el audio original) y su sidecar
     ``<output>.layout.json``.
+
+    ``on_progress(0..1)`` recibe el avance (rastreo = primera mitad, dibujo =
+    segunda) y ``cancelled()`` se consulta en cada cuadro: si devuelve True se
+    lanza StopRequested y no se escribe ``output``.
     """
-    from media.vendor.clippyme_reframe import reframe as cr
-    from media.vendor.clippyme_reframe.reframe_detect import detect_face_candidates
+    from media.errors import StopRequested
+    from media.vendor.reframe import reframe as cr
+    from media.vendor.reframe.reframe_detect import detect_face_candidates
 
     mode = mode if mode in MODES else "auto"
     output = Path(output)
@@ -385,9 +395,9 @@ def reframe(source_slice: Path, output: Path, mode: str = "auto", *, width: int 
         if mode == "off":
             layouts = ["GENERAL"] * len(bounds)
         else:
-            layouts = cr.analyze_scenes_strategy(src, bounds)
-            if mode == "track":
-                layouts = ["TRACK" if s != "GENERAL" else s for s in layouts]
+            layouts = cr.analyze_scenes_strategy(src, bounds, reader=read_at)
+            if mode == "track":  # una persona: fija, o siguiéndola si camina
+                layouts = ["TRACK" if s not in ("GENERAL", "FOLLOW") else s for s in layouts]
             elif mode == "wide":
                 layouts = ["WIDE" if s != "GENERAL" else s for s in layouts]
         splits = {}
@@ -398,9 +408,20 @@ def reframe(source_slice: Path, output: Path, mode: str = "auto", *, width: int 
             for i in splits:
                 layouts[i] = "SPLIT"
 
+        state = {"last": -1.0}
+
+        def report(frac: float) -> None:
+            if cancelled is not None and cancelled():
+                raise StopRequested("render cancelado")
+            if on_progress is not None and frac - state["last"] >= 0.01:
+                state["last"] = frac
+                on_progress(frac)
+
+        frames_total = max(1, int(total or 0))
         meter = _MouthMeter(splits, src_w, src_h, fps) if (splits and speaker_cut_enabled()) else None
         targets, scene_ids = cr.track_static_targets(
-            src, bounds, layouts, cam, frame_hook=meter, hook_scenes=frozenset(splits) if meter else frozenset())
+            src, bounds, layouts, cam, frame_hook=meter, hook_scenes=frozenset(splits) if meter else frozenset(),
+            tick=lambda n: report(0.5 * min(1.0, n / frames_total)))
 
         # Hablante activo: en vez de apilar, corte en seco a quien habla.
         speaker_frames: dict[int, list] = {}
@@ -436,8 +457,17 @@ def reframe(source_slice: Path, output: Path, mode: str = "auto", *, width: int 
             return cr.crop_frame(frame, cam.crop_box_at(*tgt), width, height)
 
         proc = cr.open_encoder(width, height, fps, str(tmp_video), ff, video_args(faststart=False))
+        lower_priority(proc)  # el estudio no se traba mientras se codifica
+        written = {"n": 0}
+
+        def write(out) -> None:
+            # Fuera de frame_fn: allí las excepciones se tragan (cuadro corrupto).
+            written["n"] += 1
+            report(0.5 + 0.5 * min(1.0, written["n"] / frames_total))
+            proc.stdin.write(out.tobytes())
+
         try:
-            frames, dropped = cr.render_frames(src, frame_fn, lambda out: proc.stdin.write(out.tobytes()))
+            frames, dropped = cr.render_frames(src, frame_fn, write)
             proc.stdin.close()
             err = proc.stderr.read().decode(errors="replace")
             proc.wait()
@@ -458,15 +488,17 @@ def reframe(source_slice: Path, output: Path, mode: str = "auto", *, width: int 
             if end <= start:
                 continue
             layout = layouts[sid]
-            label = {"SPEAKER": "track"}.get(layout, layout.lower())
+            label = {"SPEAKER": "track", "FOLLOW": "track"}.get(layout, layout.lower())
             ranges.append({"start": start, "end": end, "layout": label})
             info = {"start": round(start, 3), "end": round(end, 3), "layout": label}
             if layout == "SPLIT":
                 info["split"] = {"top": list(geos[sid][0][:4]), "bottom": list(geos[sid][1][:4])}
-            elif layout in ("TRACK", "WIDE"):
+            elif layout in ("TRACK", "WIDE", "FOLLOW"):
                 idx = min(s_f, len(targets) - 1)
                 if 0 <= idx < len(targets) and targets[idx]:
-                    info["crop"] = list(cam.crop_box_at(*targets[idx]))
+                    info["crop"] = list(cam.crop_box_at(*targets[idx]))  # FOLLOW: el del primer cuadro
+                if layout == "FOLLOW":
+                    info["follow"] = True
             elif layout == "SPEAKER":
                 info["speaker_cut"] = True
             scenes.append(info)
@@ -482,11 +514,23 @@ def reframe(source_slice: Path, output: Path, mode: str = "auto", *, width: int 
                 pass
 
 
-def pick_cover(video: Path, out_jpg: Path) -> Path | None:
-    """Portada automática: rostro + nitidez + exposición (ClipPyMe)."""
-    from media.vendor.clippyme_reframe import reframe as cr
+def best_cover_time(video: Path, max_samples: int = 48) -> float | None:
+    """Segundo del mejor cuadro de ``video`` para una portada (misma
+    puntuación que `pick_cover`: rostro + nitidez + exposición). None si falla."""
+    from media.vendor.reframe import reframe as cr
     try:
-        return cr.select_cover_frame(str(video), str(out_jpg)) and Path(out_jpg)
+        t, _frame = cr.best_cover_frame(str(video), reader=read_at, max_samples=max_samples)
+        return t
+    except Exception as exc:
+        log.warning("cuadro de portada: %s", exc)
+        return None
+
+
+def pick_cover(video: Path, out_jpg: Path) -> Path | None:
+    """Portada automática: rostro + nitidez + exposición."""
+    from media.vendor.reframe import reframe as cr
+    try:
+        return cr.select_cover_frame(str(video), str(out_jpg), reader=read_at) and Path(out_jpg)
     except Exception as exc:
         log.warning("portada: %s", exc)
         return None

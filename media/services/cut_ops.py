@@ -1,4 +1,4 @@
-"""Bordes limpios: palabra → frase → silencio (plan 6.3 paso 9 y 6.6.1).
+"""Bordes limpios: palabra → frase → silencio.
 
 Adaptado de ClipPyMe — https://github.com/fralapo/clippyme
 Rutas originales: src/clippyme/pipeline/cut_ops.py (snap_clip_to_words,
@@ -6,9 +6,10 @@ _is_sentence_final, sentence_boundaries, snap_clip_to_sentences,
 refine_edges_to_silence) y src/clippyme/pipeline/media_probe.py
 (parse_silencedetect, detect_silences).
 Copyright (c) 2026 ClippyMe — Licencia MIT (ver media/vendor/NOTICE.md).
-Cambios: palabras con clave ``w``; tope de duración 90 s (plan); abreviaturas
-en español; el ajuste a silencio nunca mete un borde dentro del habla; se
-añade el salto del conector inicial; sin Smart Cut, fades ni SnapEvent.
+Cambios: palabras con clave ``w``; tope de duración configurable (CLIP_MAX_SEC);
+abreviaturas en español; el ajuste a silencio nunca mete un borde dentro del
+habla; se añade el salto del conector inicial y el ajuste final de duración
+(`fit_duration`, propio); sin Smart Cut, fades ni SnapEvent.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ DEFAULT_POST_PAD = 0.08
 DEFAULT_MAX_SNAP = 0.6
 DEFAULT_SENTENCE_BACK = 2.5
 DEFAULT_SENTENCE_FWD = 1.5
-DEFAULT_MAX_CLIP_DURATION = 90.0
+DEFAULT_MAX_CLIP_DURATION = 150.0
 DEFAULT_SILENCE_WINDOW = 1.0
 DEFAULT_SILENCE_LEAD = 0.04
 DEFAULT_SILENCE_TAIL = 0.06
@@ -33,7 +34,7 @@ _ABBREVIATIONS = frozenset({
     "sra.", "srta.", "ud.", "uds.", "dra.", "lic.", "ing.", "av.", "pág.", "núm.", "aprox.",
 })
 
-# Conectores que no deberían abrir un clip (plan 6.3 paso 9).
+# Conectores que no deberían abrir un clip.
 CONNECTORS = frozenset({
     "y", "e", "entonces", "pero", "pues", "bueno", "además", "osea", "o", "eh", "este", "mmm",
     "and", "so", "but", "also", "um", "uh", "well",
@@ -243,6 +244,57 @@ def refine_edges_to_silence(start: float, end: float, silences: list[tuple[float
     path = ("silence" if moved_s and moved_e else "silence_start" if moved_s
             else "silence_end" if moved_e else "none")
     return new_start, new_end, path
+
+
+def fit_duration(start: float, end: float, words: list[dict], *, lo: float, hi: float,
+                 target: float | None = None, source_duration: float | None = None,
+                 pre_pad: float = DEFAULT_PRE_PAD,
+                 post_pad: float = DEFAULT_POST_PAD) -> tuple[float, float, str]:
+    """Lleva la duración del clip a [lo, hi] sin cortar palabras.
+
+    Solo mueve el final (el inicio ya está en el gancho): primero a un cierre
+    de frase, si no hay a un final de palabra y, como último recurso, al tope.
+    Al alargar se elige el cierre de frase más cercano a ``target``; sin
+    ``target`` (duración decidida por la historia) se alarga lo mínimo, sin
+    rellenar. Si el video termina antes de llegar a ``lo``, se adelanta el
+    inicio a un comienzo de palabra.
+    """
+    start, end = float(start), float(end)
+    limit = float(source_duration) if source_duration is not None else float("inf")
+    if lo <= end - start <= hi:
+        return start, end, "none"
+    target = min(hi, max(lo, target if target is not None else lo))
+    _onsets, finals = sentence_boundaries(words) if words else ([], [])
+    word_ends = [w["end"] for w in words or []]
+
+    def ends_in(times: list[float], a: float, b: float) -> list[float]:
+        return [t + post_pad for t in times if a <= t + post_pad <= b and t + post_pad <= limit]
+
+    if end - start > hi:
+        a, b = start + lo, start + hi
+        for times, label in ((finals, "trim_sentence"), (word_ends, "trim_word")):
+            cands = ends_in(times, a, b)
+            if cands:
+                return start, round(max(cands), 3), label
+        return start, round(min(b, limit), 3), "trim_hard"
+
+    a, b = start + lo, min(start + hi, limit)
+    goal = start + target
+    cands = ends_in(finals, a, b)
+    if cands:
+        return start, round(min(cands, key=lambda t: abs(t - goal)), 3), "extend_sentence"
+    cands = ends_in(word_ends, a, b)
+    if cands:
+        return start, round(min(cands), 3), "extend_word"
+    if limit - start >= lo:
+        return start, round(min(start + lo, limit), 3), "extend_hard"
+    # El video se acaba antes: final en la última palabra y se adelanta el inicio.
+    last = max((t + post_pad for t in word_ends if t + post_pad <= limit), default=limit)
+    new_end = max(min(end, limit), last)
+    want = max(0.0, new_end - lo)
+    starts = [w["start"] - pre_pad for w in words or [] if w["start"] - pre_pad <= want]
+    new_start = max(0.0, max(starts)) if starts else want
+    return round(new_start, 3), round(new_end, 3), "extend_start"
 
 
 def clean_edges(start: float, end: float, words: list[dict], silences: list[tuple[float, float]],

@@ -1,4 +1,4 @@
-"""Puntaje y selección (plan 6.3, pasos 5, 7 y 8). Funciones puras."""
+"""Puntaje y selección. Funciones puras."""
 from __future__ import annotations
 
 AXES = ("hook", "story", "value", "engagement", "reach")
@@ -10,14 +10,23 @@ def llm_score(j: dict) -> float:
     return sum(w * max(0.0, min(10.0, float(j.get(axis, 0) or 0))) for axis, w in AXIS_WEIGHTS.items())
 
 
+PAUSE_BONUS = 0.2
+
+
+def hook_signal(sig: dict) -> float:
+    """Gancho textual más la entrada limpia tras una pausa (≤ 1)."""
+    return min(1.0, sig.get("hook", 0.0) + PAUSE_BONUS * sig.get("pause", 0.0))
+
+
 def final_score(j: dict, sig: dict) -> int:
     """Score = 100 × (0.55 S_LLM/10 + 0.20 heat + 0.15 audio + 0.10 gancho).
-    Sin heatmap su peso se reparte entre las demás señales."""
+    Sin heatmap su peso se reparte entre las demás señales. El gancho incluye
+    la pausa previa (`hook_signal`)."""
     w = {"llm": 0.55, "heat": 0.20, "audio": 0.15, "hook": 0.10}
     if sig.get("heat") is None:
         w = {"llm": 0.65, "heat": 0.0, "audio": 0.22, "hook": 0.13}
     s = (w["llm"] * llm_score(j) / 10 + w["heat"] * (sig.get("heat") or 0.0)
-         + w["audio"] * sig.get("audio", 0.0) + w["hook"] * sig.get("hook", 0.0))
+         + w["audio"] * sig.get("audio", 0.0) + w["hook"] * hook_signal(sig))
     return int(round(100 * max(0.0, min(1.0, s))))
 
 
@@ -27,7 +36,7 @@ def quick_score(sig: dict) -> float:
     if sig.get("heat") is None:
         w = {"heat": 0.0, "audio": 0.30, "density": 0.30, "hook": 0.40}
     return (w["heat"] * (sig.get("heat") or 0.0) + w["audio"] * sig.get("audio", 0.0)
-            + w["density"] * sig.get("density", 0.0) + w["hook"] * sig.get("hook", 0.0))
+            + w["density"] * sig.get("density", 0.0) + w["hook"] * hook_signal(sig))
 
 
 def heuristic_score(sig: dict) -> int:

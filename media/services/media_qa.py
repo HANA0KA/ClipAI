@@ -1,4 +1,4 @@
-"""Revisión de calidad del render antes de entregarlo (plan 6.6.7).
+"""Revisión de calidad del render antes de entregarlo.
 
 Adaptado de ClipPyMe — https://github.com/fralapo/clippyme
 Rutas originales: src/clippyme/pipeline/media_qa.py (probe_media,

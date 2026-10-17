@@ -1,5 +1,6 @@
 """Bordes, generador ASS, JSON tolerante, corte inteligente, tramos y QA."""
 import json
+import re
 
 from media.services import ass_builder, cut_ops, layout_ranges, media_qa, smartcut
 from media.services.json_repair import parse_json, parse_model_list
@@ -104,7 +105,9 @@ def test_build_ass_events_hook_and_seam():
     assert "Style: Caption,Montserrat ExtraBold,84" in ass
     lines = [l for l in ass.splitlines() if l.startswith("Dialogue")]
     hook = [l for l in lines if ",Hook," in l]
-    assert len(hook) == 1 and "0:00:00.00,0:00:03.00" in hook[0] and "NADIE TE LO DICE" in hook[0]
+    plain = re.sub(r"\{[^}]*\}", "", hook[0]) if hook else ""
+    assert len(hook) == 1 and "0:00:00.00,0:00:03.00" in hook[0] and plain.endswith("NADIE TE LO DICE")
+    assert "{\\c&H2828D6&}NADIE" in hook[0]  # palabra fuerte en el acento de la plantilla
     caps = [l for l in lines if ",Caption," in l]
     assert len(caps) == len(words)  # un evento por palabra
     assert "{\\an5}" not in caps[0] and "{\\an5}" in caps[-1]  # unión solo en tramos SPLIT
@@ -174,7 +177,7 @@ def test_evaluate_clip_qa_critical_vs_warnings():
 
 
 def test_collapse_scene_targets_static_and_keeps_extremes():
-    from media.vendor.clippyme_reframe.reframe_ops import collapse_scene_targets
+    from media.vendor.reframe.reframe_ops import collapse_scene_targets
     # Escena TRACK: el sujeto pasa casi todo el tiempo en x=1100 y al final se va a 1300.
     targets = [(1100.0, 500.0, 1.2)] * 8 + [(1300.0, 500.0, 1.2)] * 2 + [None] * 3
     out = collapse_scene_targets(targets, [0] * 13, ["TRACK"] * 13, x_max=1920, y_max=1080,

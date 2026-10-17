@@ -1,4 +1,4 @@
-"""Candidatos de 30–90 s y señales objetivas (plan 6.3, pasos 3 y 4).
+"""Candidatos (CLIP_MIN_SEC–CLIP_MAX_SEC, 60–150 s) y señales objetivas.
 
 Funciones puras salvo `audio_profile`, que lee un WAV.
 Un candidato es un dict ``{start, end, i, j, topic, source}`` donde ``i``/``j``
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import wave
+from bisect import bisect_left
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -151,9 +152,17 @@ def audio(z: np.ndarray, s: float, e: float) -> float:
     return float((seg > 1.5).mean()) if len(seg) else 0.0
 
 
+def _slice(words: list[dict], s: float, e: float) -> list[dict]:
+    """Palabras que empiezan en [s, e) (palabras ordenadas: búsqueda binaria;
+    con clips de hasta 150 s hay miles de candidatos)."""
+    i = bisect_left(words, s, key=lambda w: w["start"])
+    j = bisect_left(words, e, key=lambda w: w["start"])
+    return words[i:j]
+
+
 def density(words: list[dict], s: float, e: float) -> float:
     """Palabras por segundo normalizadas; los silencios largos restan."""
-    ws = [w for w in words if s <= w["start"] < e]
+    ws = _slice(words, s, e)
     dur = max(1e-6, e - s)
     if not ws:
         return 0.0
@@ -172,11 +181,23 @@ HOOK_MINUS = re.compile(
 
 def hook_rule(words: list[dict], s: float) -> float:
     """Reglas sobre los primeros 3 s del clip."""
-    first = " ".join(w["w"] for w in words if s <= w["start"] < s + 3).lower().strip(" ,.")
+    first = " ".join(w["w"] for w in _slice(words, s, s + 3)).lower().strip(" ,.")
     if not first:
         return 0.2
     score = 0.5 + 0.15 * len(HOOK_PLUS.findall(first)) - 0.4 * bool(HOOK_MINUS.match(first))
     return max(0.0, min(1.0, score))
+
+
+def pause_before(words: list[dict], s: float) -> float:
+    """Pausa antes de la primera frase del clip: una entrada limpia (el orador
+    calla ≥ 1 s y arranca una idea nueva) vale 1; de 0,5 a 1 s vale 0,5."""
+    i = bisect_left(words, s - 0.15, key=lambda w: w["start"])  # palabras ordenadas
+    if i >= len(words):
+        return 0.0
+    gap = words[i]["start"] - (words[i - 1]["end"] if i > 0 else 0.0)
+    if gap >= 1.0:
+        return 1.0
+    return 0.5 if gap >= 0.5 else 0.0
 
 
 def signals_for(c: dict, words: list[dict], hm, audio_z: np.ndarray, duration: float) -> dict:
@@ -185,4 +206,5 @@ def signals_for(c: dict, words: list[dict], hm, audio_z: np.ndarray, duration: f
         "audio": audio(audio_z, c["start"], c["end"]),
         "density": density(words, c["start"], c["end"]),
         "hook": hook_rule(words, c["start"]),
+        "pause": pause_before(words, c["start"]),
     }

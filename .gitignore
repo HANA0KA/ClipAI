@@ -4,9 +4,6 @@
 !.env.example
 data/
 
-# Repos de referencia (tienen su propio .git)
-REFERENCIAS CLIPPING/
-
 # Python
 .venv/
 __pycache__/
@@ -23,7 +20,12 @@ web/next-env.d.ts
 web/lib/generated/
 *.tsbuildinfo
 
+# Notas y material local que no se publica
+ClipAi — Plan de Desarrollo.md
+REFERENCIAS CLIPPING/
+
 # Varios
 .DS_Store
 *.log
 logs/
+.ruff_cache/

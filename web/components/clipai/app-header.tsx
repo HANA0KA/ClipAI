@@ -1,8 +1,9 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Eraser } from "lucide-react";
+import { Eraser, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -12,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, useHealth } from "@/lib/client";
-import { llmLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 function Wordmark() {
@@ -27,28 +27,34 @@ function Wordmark() {
   );
 }
 
+/**
+ * Estado de los servicios locales. Con todo en orden es solo un punto verde (el
+ * detalle sale al pasar el cursor); si algo falla —servicio detenido, FFmpeg sin
+ * libass, sin Deno o sin IA configurada— dice qué, para que se note.
+ */
 function ServiceStatus() {
   const { data, isError } = useHealth();
   const down = isError || (data && !data.ok);
   const degraded = !down && data && (!data.libass || !data.deno);
-  const tone = down ? "bg-destructive" : degraded ? "bg-primary" : data ? "bg-success" : "bg-muted-foreground";
-  const label = down
+  const noAi = !down && data && !data.llmConfigured;
+  const tone = down ? "bg-destructive" : degraded || noAi ? "bg-primary" : data ? "bg-success" : "bg-muted-foreground";
+  const problem = down
     ? "Servicio local detenido"
-    : !data
-      ? "Conectando…"
-      : data.llmConfigured
-        ? data.llm?.startsWith("openai:")
-          ? `IA local: ${llmLabel(data.llm).replace("local: ", "")}`
-          : data.llm?.startsWith("vertex:")
-            ? "IA: Gemini en Vertex"
-            : "IA: Gemini"
-        : "Sin IA: respaldo por señales";
+    : degraded
+      ? !data?.libass ? "FFmpeg sin libass" : "Falta Deno"
+      : noAi
+        ? "Sin IA: respaldo por señales"
+        : null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+        <span
+          className={cn("flex items-center gap-2 rounded-full text-xs text-muted-foreground", problem && "border border-border px-3 py-1")}
+          role="status"
+          aria-label={problem ?? (data ? "Servicios locales en orden" : "Conectando con los servicios locales")}
+        >
           <span className={cn("size-2 rounded-full", tone)} />
-          {label}
+          {problem}
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-relaxed">
@@ -56,13 +62,16 @@ function ServiceStatus() {
           <p>{data?.error ?? "FastAPI no responde en 127.0.0.1:8000. Arranca con ./start.sh."}</p>
         ) : data ? (
           <div className="space-y-1">
+            <p>{problem ?? "Servicios locales en orden"}</p>
             <p>FFmpeg {data.libass ? "con" : "sin"} libass{data.libass ? "" : ": instala ffmpeg-full"}</p>
             <p>yt-dlp {data.ytdlp ?? "?"}{data.deno ? " con Deno" : ", falta Deno"}</p>
             <p>Transcripción {data.whisper}</p>
             <p>Disco libre {data.diskFreeGb} GB</p>
             {data.worker?.current && <p>Trabajando: {data.worker.current.type}</p>}
           </div>
-        ) : null}
+        ) : (
+          <p>Conectando…</p>
+        )}
       </TooltipContent>
     </Tooltip>
   );
@@ -108,10 +117,19 @@ function CleanupButton() {
 }
 
 export function AppHeader() {
+  const pathname = usePathname();
+  const trending = pathname.startsWith("/tendencias");
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6">
-        <Wordmark />
+        <div className="flex items-center gap-5">
+          <Wordmark />
+          <nav aria-label="Principal" className="flex items-center gap-1">
+            <Button asChild variant={trending ? "secondary" : "ghost"} size="sm">
+              <Link href="/tendencias" aria-current={trending ? "page" : undefined}><TrendingUp /> Tendencias</Link>
+            </Button>
+          </nav>
+        </div>
         <div className="flex items-center gap-2">
           <ServiceStatus />
           <CleanupButton />

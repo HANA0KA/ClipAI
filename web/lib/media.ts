@@ -3,6 +3,13 @@ import { MEDIA_API_URL } from "@/lib/paths";
 
 export class MediaUnavailable extends Error {}
 
+/** Respuesta de error del servicio Python, con su código (400, 404, 409…). */
+export class MediaHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 /** Llamada al servicio Python (FastAPI) en 127.0.0.1. */
 export async function mediaFetch<T = unknown>(path: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const { json, ...rest } = init ?? {};
@@ -21,12 +28,29 @@ export async function mediaFetch<T = unknown>(path: string, init?: RequestInit &
     );
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    if (res.ok) throw new MediaHttpError("Respuesta no válida del servicio de procesamiento", 502);
+  }
   if (!res.ok) {
-    const detail = data && typeof data === "object" && "detail" in data ? String(data.detail) : text;
-    throw new Error(detail || `Error ${res.status} del servicio de procesamiento`);
+    const detail = data && typeof data === "object" && "detail" in data ? detailText(data.detail) : text;
+    throw new MediaHttpError(detail || `Error ${res.status} del servicio de procesamiento`, res.status);
   }
   return data as T;
+}
+
+/** `detail` de FastAPI → texto: un mensaje, o la lista de campos no válidos (422). */
+function detailText(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const fields = detail
+      .map((d) => (d && typeof d === "object" && "loc" in d && Array.isArray(d.loc) ? String(d.loc.at(-1)) : ""))
+      .filter(Boolean);
+    return `Datos no válidos${fields.length ? `: ${[...new Set(fields)].join(", ")}` : ""}`;
+  }
+  return detail == null ? "" : JSON.stringify(detail);
 }
 
 export function enqueueJob(type: string, targetId: string, payload: Record<string, unknown> = {}) {

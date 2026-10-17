@@ -1,7 +1,7 @@
 """Transcripciones: subtítulos de YouTube (json3/VTT) → palabras → frases.
 
 Formato común de palabra: ``{"w": str, "start": float, "end": float}`` con
-tiempos absolutos en segundos. Funciones puras (plan 6.2), sin dependencias.
+tiempos absolutos en segundos. Funciones puras, sin dependencias.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _SENTENCE_END_RE = re.compile(r"[.?!…]['\")\]»]*$")
 
 
 def _clean_token(text: str) -> str:
-    return html.unescape(text).replace("​", "").replace("\n", " ").strip()
+    return html.unescape(text).replace("\u200b", "").replace("\n", " ").strip()
 
 
 def _spread(text: str, start: float, end: float) -> list[dict]:
@@ -212,6 +212,89 @@ def to_sentences(words: list[dict], max_gap: float = 0.7, max_words: int = 30) -
             out.append({"text": " ".join(x["w"] for x in cur), "start": cur[0]["start"],
                         "end": cur[-1]["end"], "w0": first, "w1": i})
             cur = []
+    return out
+
+
+def merge_continuations(tokens: list[dict]) -> list[dict]:
+    """Une los fragmentos que Whisper parte de una palabra («40» + «.000»,
+    «YouTube» + «-Kanal»). faster-whisper marca el inicio de cada palabra con
+    un espacio delante; un token sin ese espacio continúa la palabra anterior.
+    Entrada: ``[{"w": texto_sin_limpiar, "start", "end"}]``; salida con el
+    texto ya limpio.
+
+    Idea de OpenShorts — https://github.com/mutonby/openshorts
+    Ruta original: subtitles.py (merge_continuation_words).
+    Copyright (c) 2024 OpenShorts — Licencia MIT (ver media/vendor/NOTICE.md).
+    """
+    out: list[dict] = []
+    for t in tokens:
+        raw = t.get("w") or ""
+        text = raw.strip()
+        if not text:
+            continue
+        if out and not raw[:1].isspace():
+            out[-1]["w"] += text
+            out[-1]["end"] = max(out[-1]["end"], t["end"])
+            continue
+        out.append({**t, "w": text})
+    return out
+
+
+_NUM_TAIL_RE = re.compile(r"^[.,]\d")
+
+
+def join_number_fragments(words: list[dict], max_gap: float = 0.35) -> list[dict]:
+    """Reparo para transcripciones guardadas antes de `merge_continuations`
+    (ya sin el espacio que marcaba el inicio): pega «.000» o «%» a la cifra
+    anterior cuando van seguidos. No toca nada más."""
+    out: list[dict] = []
+    for w in words:
+        text = str(w.get("w", ""))
+        prev = out[-1] if out else None
+        if (prev is not None and prev["w"][-1:].isdigit() and w["start"] - prev["end"] <= max_gap
+                and (_NUM_TAIL_RE.match(text) or text in ("%", "%.", "%,"))):
+            out[-1] = {**prev, "w": prev["w"] + text, "end": max(prev["end"], w["end"])}
+            continue
+        out.append(w)
+    return out
+
+
+def _speech_edge(silences: list[tuple[float, float]], t: float, before: bool) -> float:
+    """Borde del tramo con voz pegado a ``t``: el fin del silencio anterior
+    (``before``) o el inicio del siguiente."""
+    if before:
+        return max((b for a, b in silences if b <= t + 1e-6), default=float("-inf"))
+    return min((a for a, b in silences if a >= t - 1e-6), default=float("inf"))
+
+
+def snap_out_of_silence(words: list[dict], silences: list[tuple[float, float]], *, min_silence: float = 0.4,
+                        slack: float = 0.03, min_speech: float = 0.25, max_len: float = 1.0) -> list[dict]:
+    """Whisper a veces deja una palabra dentro de un silencio real (sobre todo
+    la última antes de una pausa larga), y esa palabra queda sin subtítulo o
+    en el clip vecino. Si junto a ese silencio hay voz sin ninguna palabra, la
+    palabra se mueve ahí (antes si cierra frase o solo hay voz libre antes;
+    si no, después). Solo palabras enteras dentro del silencio: la que apenas
+    lo pisa está bien ubicada. Sin voz libre al lado no se toca. Idempotente."""
+    long = sorted((float(a), float(b)) for a, b in silences if b - a >= min_silence)
+    if not long or not words:
+        return words
+    all_sil = sorted((float(a), float(b)) for a, b in silences)
+    out = [dict(w) for w in words]
+    for i, w in enumerate(out):
+        dur = w["end"] - w["start"]
+        hit = next(((a, b) for a, b in long if dur > 0 and a - slack <= w["start"] and w["end"] <= b + slack), None)
+        if hit is None:
+            continue
+        a, b = hit
+        if i == 0 or i + 1 == len(out):
+            continue  # en los bordes del rango la voz de al lado puede ser de palabras que no están aquí
+        lo = max(out[i - 1]["end"], _speech_edge(all_sil, a, True))     # voz libre antes: [lo, a]
+        hi = min(out[i + 1]["start"], _speech_edge(all_sil, b, False))  # voz libre después: [b, hi]
+        free_before, free_after = a - lo >= min_speech, hi - b >= min_speech
+        if free_before and (free_after is False or _SENTENCE_END_RE.search(str(w.get("w", "")))):
+            w["start"], w["end"] = round(max(lo, a - max(dur, max_len)), 3), round(a, 3)
+        elif free_after:
+            w["start"], w["end"] = round(b, 3), round(min(hi, b + max(dur, max_len)), 3)
     return out
 
 

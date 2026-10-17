@@ -1,32 +1,61 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "cn"
-import { Switch as SwitchPrimitive } from "radix-ui"
-
-function Switch({
-  className,
-  size = "default",
-  ...props
-}: React.ComponentProps<typeof SwitchPrimitive.Root> & {
-  size?: "sm" | "default"
-}) {
+import * as React from "react";
+import { controlRadiusStyle, type ControlRadius } from "@/lib/cojeev/control-appearance";
+import { useChoreography } from "@/lib/cojeev-motion/choreography";
+import { useMorph } from "@/lib/cojeev-motion/use-morph";
+import { cva } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import * as Primitive from "@radix-ui/react-switch";
+export const switchVariants = cva(
+  "v-switch [position:relative] [display:inline-block] [border-radius:var(--r-pill)] [flex:none] [cursor:pointer] [width:48px] [height:28px] [background:var(--v-beige)] [box-shadow:inset_0_0_0_1px_var(--v-edge)]",
+);
+export type SwitchProps = React.ComponentProps<typeof Primitive.Root> & { appearance?: "capsule" | "rocker" | "latch"; radius?: ControlRadius };
+export function Switch({ className, ref, appearance = "capsule", radius, style, checked, defaultChecked, onCheckedChange, ...props }: SwitchProps) {
+  const face = React.useRef<HTMLSpanElement>(null);
+  const morphRef = useMorph<HTMLSpanElement>("controls", face);
+  const [local, setLocal] = React.useState(defaultChecked ?? false);
+  const selected = checked ?? local;
+  const { quiet } = useChoreography();
+  React.useEffect(() => {
+    const surface = face.current, owner = surface?.parentElement;
+    if (!surface || !owner) return;
+    const controller = new AbortController();
+    for (const type of ["pointerenter", "pointerleave", "pointerdown", "pointercancel", "keydown", "keyup", "focusin", "focusout"]) {
+      owner.addEventListener(type, event => {
+        if (event.target === surface || owner.matches(":disabled")) return;
+        const forwarded = event instanceof KeyboardEvent ? new KeyboardEvent(type, { key: event.key }) : new Event(type);
+        surface.dispatchEvent(forwarded);
+      }, { signal: controller.signal });
+    }
+    return () => controller.abort();
+  }, []);
   return (
-    <SwitchPrimitive.Root
+    <Primitive.Root
+      ref={ref}
       data-slot="switch"
-      data-size={size}
-      className={cn(
-        "peer group/switch relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-all outline-none group-has-[:focus-visible]/field-label:border-transparent group-has-[:focus-visible]/field-label:ring-0 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80 data-disabled:cursor-not-allowed data-disabled:opacity-50",
-        className
-      )}
+      data-part="root"
+      data-appearance={appearance}
+      data-motion-quiet={quiet || undefined}
+      style={{ ...controlRadiusStyle(radius), ...style }}
+      className={cn(switchVariants(), className)}
+      checked={selected}
+      onCheckedChange={next => { if (checked === undefined) setLocal(next); onCheckedChange?.(next); }}
       {...props}
     >
-      <SwitchPrimitive.Thumb
-        data-slot="switch-thumb"
-        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-primary-foreground group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground"
-      />
-    </SwitchPrimitive.Root>
-  )
+      <span ref={morphRef} data-slot="switch-face" data-appearance={appearance} data-state={selected ? "checked" : "unchecked"} data-disabled={props.disabled ? "" : undefined} aria-hidden="true" aria-disabled={props.disabled || undefined} data-motion={quiet || props.disabled ? "off" : undefined} className={cn(switchVariants(), className?.split(/\s+/).filter(name => ["-olive", "-blue", "-yellow", "-ink", "-sm"].includes(name)))}>
+      {appearance === "rocker" ? <span data-slot="switch-rocker" aria-hidden="true"><span>O</span><span>I</span></span> : appearance === "latch" ? <span data-slot="switch-latch" aria-hidden="true"><span data-mark="off">OFF</span><span data-mark="on">ON</span></span> : <Primitive.Thumb data-slot="switch-thumb" data-part="thumb" />}
+      </span>
+    </Primitive.Root>
+  );
 }
-
-export { Switch }
+export type SwitchRowProps = React.ComponentProps<"label">;
+export function SwitchRow({ className, ...props }: SwitchRowProps) {
+  return (
+    <label
+      data-slot="switch-row"
+      className={cn("v-switchrow", className)}
+      {...props}
+    />
+  );
+}

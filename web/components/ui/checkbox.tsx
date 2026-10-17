@@ -1,32 +1,105 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "cn"
-import { Checkbox as CheckboxPrimitive } from "radix-ui"
-import { CheckIcon } from "lucide-react"
-
-function Checkbox({
+import * as React from "react";
+import { controlRadiusStyle, type ControlRadius } from "@/lib/cojeev/control-appearance";
+import {
+  SelectorGlyph,
+  selectorStyle,
+  type SelectorShape,
+  type SelectorTone,
+  type SelectorSize,
+  type SelectorIndicator,
+} from "@/lib/cojeev/selector";
+export type {
+  SelectorShape,
+  SelectorTone,
+  SelectorSize,
+  SelectorIndicator,
+} from "@/lib/cojeev/selector";
+import { cva } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import * as Primitive from "@radix-ui/react-checkbox";
+export const checkboxVariants = cva(
+  "v-check [display:inline-flex] [cursor:pointer] [background:none] [gap:var(--s-3)] [align-items:center] [font-size:var(--fs-body)] [box-shadow:none] [border:0]",
+);
+export type CheckboxProps = React.ComponentProps<typeof Primitive.Root> & {
+  appearance?: "row" | "card" | "chip";
+  radius?: ControlRadius;
+  shape?: SelectorShape;
+  tone?: SelectorTone;
+  size?: SelectorSize;
+  indicator?: SelectorIndicator;
+  showIndicator?: boolean;
+};
+export function Checkbox({
   className,
+  children,
+  ref,
+  shape = "organic",
+  tone = "pink",
+  size = "default",
+  indicator = "auto",
+  showIndicator = true,
+  style,
+  appearance,
+  radius,
+  checked: controlled,
+  defaultChecked = false,
+  onCheckedChange,
   ...props
-}: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
+}: CheckboxProps) {
+  const [local, setLocal] = React.useState<boolean | "indeterminate">(
+    defaultChecked,
+  );
+  const checked = controlled ?? local;
   return (
-    <CheckboxPrimitive.Root
+    <Primitive.Root
+      ref={ref}
       data-slot="checkbox"
-      className={cn(
-        "peer relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors outline-none group-has-disabled/field:opacity-50 group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground group-has-[:focus-visible]/field-label:data-checked:border-primary dark:data-checked:bg-primary",
-        className
-      )}
+      data-part="root"
+      data-appearance={appearance}
+      data-selector-shape={shape}
+      style={selectorStyle(tone, { ...controlRadiusStyle(radius), ...style }, size)}
+      checked={checked}
+      onCheckedChange={(next) => {
+        if (controlled === undefined) setLocal(next);
+        onCheckedChange?.(next);
+      }}
+      className={cn(checkboxVariants(), className)}
       {...props}
     >
-      <CheckboxPrimitive.Indicator
-        data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
-      >
-        <CheckIcon
+      <span data-slot="checkbox-indicator" data-part="indicator">
+        <SelectorGlyph
+          shape={shape}
+          tone={tone}
+          state={checked}
+          indicator={indicator}
+          showIndicator={showIndicator}
+          kind="checkbox"
+          disabled={props.disabled}
         />
-      </CheckboxPrimitive.Indicator>
-    </CheckboxPrimitive.Root>
-  )
+      </span>
+      {children}
+    </Primitive.Root>
+  );
 }
-
-export { Checkbox }
+export type CheckboxGroupProps = React.ComponentProps<"div">;
+export function CheckboxGroup({ className, ...props }: CheckboxGroupProps) {
+  return (
+    <div
+      data-slot="checkbox-group"
+      className={cn("v-checks grid gap-2", className)}
+      {...props}
+    />
+  );
+}
+export type CheckboxBodyProps = React.ComponentProps<"span">;
+export function CheckboxBody({ className, ...props }: CheckboxBodyProps) {
+  return (
+    <span
+      data-slot="checkbox-body"
+      className={cn("v-check__body grid gap-0.5 min-w-0", className)}
+      {...props}
+    />
+  );
+}

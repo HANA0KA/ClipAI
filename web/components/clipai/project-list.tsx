@@ -2,14 +2,22 @@
 
 import { Film, Link2, Upload } from "lucide-react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/client";
 import { ACTIVE_STATUSES, duration, relativeDate } from "@/lib/format";
+import { formatClock } from "@/lib/sources";
 import type { ProjectDTO } from "@/lib/types";
 import { PhaseBar, StatusBadge } from "./status";
 
 function sourceLabel(p: ProjectDTO) {
   if (p.sourceType === "upload") return "Archivo subido";
+  if (p.sourceType === "kick") {
+    const ch = /kick\.com\/([^/?#]+)/.exec(p.sourceUrl ?? "")?.[1];
+    const span = p.rangeEndSec != null ? ` · tramo ${formatClock(p.rangeStartSec ?? 0)} – ${formatClock(p.rangeEndSec)}` : "";
+    return `Kick${ch && ch !== "video" ? ` · ${ch}` : ""}${span}`;
+  }
   try {
     const u = new URL(p.sourceUrl ?? "");
     return u.hostname.replace("www.", "") + (u.searchParams.get("v") ? `/${u.searchParams.get("v")}` : u.pathname);
@@ -24,9 +32,9 @@ function Row({ p }: { p: ProjectDTO }) {
     <li>
       <Link
         href={`/projects/${p.id}`}
-        className="grid grid-cols-[96px_1fr] items-center gap-4 rounded-lg px-2 py-3 outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[128px_1fr_auto]"
+        className="grid grid-cols-[96px_1fr] items-center gap-4 rounded-[var(--r-card-sm)] bg-card p-3 pr-4 outline-none transition-colors hover:bg-[var(--v-beige)] focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[136px_1fr_auto]"
       >
-        <div className="relative aspect-video overflow-hidden rounded-md bg-well">
+        <div className="relative aspect-video overflow-hidden rounded-[var(--r-md)] bg-well">
           {p.thumbUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={p.thumbUrl} alt="" className="size-full object-cover" loading="lazy" />
@@ -34,13 +42,13 @@ function Row({ p }: { p: ProjectDTO }) {
             <Film className="absolute inset-0 m-auto size-5 text-muted-foreground" />
           )}
           {p.durationSec ? (
-            <span className="tabular absolute right-1 bottom-1 rounded bg-black/70 px-1 text-[11px]">
+            <span className="tabular absolute right-1.5 bottom-1.5 rounded-full bg-black/70 px-1.5 py-px text-[11px] font-medium">
               {duration(p.durationSec)}
             </span>
           ) : null}
         </div>
         <div className="min-w-0">
-          <p className="truncate font-medium">{p.title || "Video sin título todavía"}</p>
+          <p className="truncate text-[15px] font-medium">{p.title || "Video sin título todavía"}</p>
           <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
             {p.sourceType === "upload" ? <Upload className="size-3" /> : <Link2 className="size-3" />}
             <span className="truncate">{sourceLabel(p)}</span>
@@ -51,8 +59,11 @@ function Row({ p }: { p: ProjectDTO }) {
               <p className="mt-1 truncate text-xs text-muted-foreground">{p.stage}</p>
             </div>
           ) : p.status === "READY" ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {p.clipCount} clips, {p.clipsRendered} renderizados
+            <p className="mt-2 flex flex-wrap gap-1.5">
+              <Badge size="sm">{p.clipCount} {p.clipCount === 1 ? "clip" : "clips"}</Badge>
+              <Badge size="sm" variant={p.clipsRendered === p.clipCount ? "olive" : "default"}>
+                {p.clipsRendered} {p.clipsRendered === 1 ? "renderizado" : "renderizados"}
+              </Badge>
             </p>
           ) : p.error ? (
             <p className="mt-1 truncate text-xs text-destructive">{p.error}</p>
@@ -71,23 +82,27 @@ export function ProjectList() {
   const { data, isLoading, error } = useProjects();
   return (
     <section className="mt-10" aria-labelledby="projects-title">
-      <h2 id="projects-title" className="font-condensed text-xl font-bold">
-        Proyectos
-      </h2>
+      <div className="flex items-baseline gap-3">
+        <h2 id="projects-title" className="font-condensed text-2xl font-bold">
+          Proyectos
+        </h2>
+        {data?.length ? <Badge variant="count">{data.length}</Badge> : null}
+      </div>
       {isLoading ? (
         <div className="mt-4 space-y-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+            <Skeleton key={i} className="h-[88px] w-full rounded-[var(--r-card-sm)]" />
           ))}
         </div>
       ) : error ? (
         <p className="mt-4 text-sm text-destructive">No se pudo leer la base de datos: {(error as Error).message}</p>
       ) : !data?.length ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Todavía no hay proyectos. Pega un enlace arriba para crear el primero.
-        </p>
+        <Empty className="mt-4 rounded-[var(--r-card)] bg-card">
+          <EmptyTitle>Todavía no hay proyectos</EmptyTitle>
+          <EmptyDescription>Pega un enlace de YouTube o de Kick arriba, o suelta un video, para crear el primero.</EmptyDescription>
+        </Empty>
       ) : (
-        <ul className="mt-2 divide-y divide-border">
+        <ul className="mt-4 space-y-2">
           {data.map((p) => (
             <Row key={p.id} p={p} />
           ))}

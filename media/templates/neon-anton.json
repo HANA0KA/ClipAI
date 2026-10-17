@@ -21,6 +21,9 @@
     "text": "#FFFFFF",
     "box": "#000000",
     "margin_v": 260,
-    "duration": 3.0
-  }
+    "duration": 3.0,
+    "accent": "#39FF14"
+  },
+  "emphasis": "#FF4FD8",
+  "emoji": false
 }

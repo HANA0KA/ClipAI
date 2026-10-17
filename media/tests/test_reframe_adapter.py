@@ -1,4 +1,4 @@
-"""Funciones puras del adaptador de reencuadre (SPLIT y hablante activo de OpenShorts)."""
+"""Funciones puras del adaptador de reencuadre (SPLIT y hablante activo)."""
 import numpy as np
 
 from media.services import reframe_adapter as ra

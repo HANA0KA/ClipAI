@@ -1,0 +1,30 @@
+{
+  "id": "tiktok",
+  "name": "TikTok",
+  "description": "Blanco en minúsculas naturales, palabra activa en rosa TikTok y claves en cian.",
+  "font": "Montserrat ExtraBold",
+  "size": 78,
+  "uppercase": false,
+  "primary": "#FFFFFF",
+  "highlight": "#FE2C55",
+  "emphasis": "#25F4EE",
+  "outline": "#000000",
+  "outline_width": 5,
+  "shadow": 2,
+  "words_per_group": 3,
+  "max_chars": 20,
+  "margin_v": 600,
+  "animation": "color",
+  "entrance": "pop",
+  "emoji": true,
+  "hook": {
+    "font": "Montserrat ExtraBold",
+    "size": 58,
+    "uppercase": false,
+    "text": "#FFFFFF",
+    "box": "#FE2C55",
+    "accent": "#111111",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}

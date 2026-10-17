@@ -1,56 +1,78 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "cn"
-import { Tooltip as TooltipPrimitive } from "radix-ui"
-
-function TooltipProvider({
-  delayDuration = 0,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+import * as React from "react";
+import { useMorph } from "@/lib/cojeev-motion/use-morph";
+import { cva } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import * as Primitive from "@radix-ui/react-tooltip";
+import { useFlowAppearance } from "@/lib/cojeev-motion/use-flow";
+export type TooltipProps = React.ComponentProps<typeof Primitive.Root>;
+export function Tooltip(props: TooltipProps) {
+  return <Primitive.Root delayDuration={220} {...props} />;
+}
+export type TooltipProviderProps = React.ComponentProps<
+  typeof Primitive.Provider
+>;
+export function TooltipProvider(props: TooltipProviderProps) {
+  return <Primitive.Provider delayDuration={220} {...props} />;
+}
+export type TooltipTriggerProps = React.ComponentProps<
+  typeof Primitive.Trigger
+>;
+export function TooltipTrigger(props: TooltipTriggerProps) {
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
+    <Primitive.Trigger
+      data-slot="tooltip-trigger"
+      data-part="trigger"
       {...props}
     />
-  )
+  );
 }
-
-function Tooltip({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+export type TooltipPortalProps = React.ComponentProps<typeof Primitive.Portal>;
+export function TooltipPortal(props: TooltipPortalProps) {
+  return <Primitive.Portal {...props} />;
 }
-
-function TooltipTrigger({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
-}
-
-function TooltipContent({
-  className,
-  sideOffset = 0,
-  children,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+export const tooltipContentVariants = cva(
+  "v-tip -show bg-[var(--v-ink)] text-[color:var(--v-on-ink)] text-[length:var(--fs-meta)] leading-[1.3] py-1.5 px-2.5 rounded-[var(--r-sm)] max-w-[260px] z-[var(--z-tooltip)]",
+);
+export type TooltipContentProps = React.ComponentProps<
+  typeof Primitive.Content
+> & { portal?: boolean; appearance?: "callout" | "shortcut" | "annotation" };
+function TooltipPaint() {
+  const ref = useMorph<HTMLSpanElement>("surfaces");
   return (
-    <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Content
-        data-slot="tooltip-content"
-        sideOffset={sideOffset}
-        className={cn(
-          "z-50 inline-flex w-fit max-w-xs origin-(--radix-tooltip-content-transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
-      </TooltipPrimitive.Content>
-    </TooltipPrimitive.Portal>
-  )
+    <span
+      ref={ref}
+      className="v-tooltip-paint"
+      data-morph="both"
+      data-r="css"
+      aria-hidden="true"
+    />
+  );
 }
-
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
+export function TooltipContent({
+  className,
+  ref,
+  children,
+  sideOffset = 8,
+  portal = true,
+  appearance,
+  ...props
+}: TooltipContentProps) {
+  const flowRef = useFlowAppearance<HTMLDivElement>(true, ref, "grow");
+  const content = (
+    <Primitive.Content
+      ref={flowRef}
+      data-slot="tooltip-content"
+      data-part="content"
+      data-appearance={appearance}
+      sideOffset={sideOffset}
+      className={cn(tooltipContentVariants(), className)}
+      {...props}
+    >
+      {appearance && !props.asChild && <TooltipPaint />}
+      {children}
+    </Primitive.Content>
+  );
+  return portal ? <Primitive.Portal>{content}</Primitive.Portal> : content;
+}

@@ -1,4 +1,4 @@
-"""Tarea `transcribe` (plan 6.2): subtítulos de YouTube primero, Whisper de respaldo.
+"""Tarea `transcribe`: subtítulos de YouTube primero, Whisper de respaldo.
 
 Orden: subtítulos manuales → automáticos (json3, VTT de respaldo) →
 youtube-transcript-api → Whisper completo (archivos subidos o sin subtítulos).
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from media.services import db, transcript, whisper
+from media.services import db, source_cache, transcript, whisper
 from media.services.atomic import read_json, write_json
 from media.tasks.common import check_stop, log, progress, project_folder, require_project
 
@@ -41,9 +41,16 @@ def run_task(project_id: str, payload: dict) -> None:
     project = require_project(project_id)
     folder = project_folder(project_id)
     out = folder / "transcript.json"
+    key = source_cache.project_key(project, folder)
+    cached = source_cache.load(key, "transcript.json")
     if out.exists() and (read_json(out, {}) or {}).get("words"):
         log.info("transcripción ya hecha (punto de control)")
         data = read_json(out, {})
+    elif cached and len(cached.get("words") or []) >= MIN_WORDS:
+        log.info("transcripción reutilizada de la caché (%s)", key)
+        progress(project_id, 50, status="TRANSCRIBING", stage="Reutilizando la transcripción de este video")
+        data = cached
+        write_json(out, data)
     else:
         progress(project_id, 21, status="TRANSCRIBING", stage="Buscando subtítulos")
         info = read_json(folder / "source.info.json", {}) or {}
@@ -86,6 +93,7 @@ def run_task(project_id: str, payload: dict) -> None:
         data = {"source": source, "language": lang or "es", "words": words,
                 "sentences": transcript.to_sentences(words)}
         write_json(out, data)
+        source_cache.save(key, "transcript.json", data)
 
     db.update_project(project_id, transcriptSource=data.get("source"), language=data.get("language"),
                       progress=60, stage=f"Transcripción lista ({len(data['words'])} palabras)")

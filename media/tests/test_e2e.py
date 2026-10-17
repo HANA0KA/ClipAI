@@ -39,7 +39,7 @@ def test_youtube_url_to_rendered_vertical_clip(temp_db, monkeypatch):
 
     from media.main import app
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
         assert client.get("/health").json()["libass"] is True
 
         pid = db.new_id()

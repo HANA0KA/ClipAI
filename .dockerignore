@@ -1,0 +1,19 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.venv
+.ruff_cache
+**/__pycache__
+**/*.pyc
+.DS_Store
+data
+docs
+REFERENCIAS CLIPPING
+ClipAi — Plan de Desarrollo.md
+README.md
+start.sh
+web/node_modules
+web/.next
+web/lib/generated

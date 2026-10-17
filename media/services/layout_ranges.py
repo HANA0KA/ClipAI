@@ -3,8 +3,8 @@
 Adaptado de OpenShorts — https://github.com/mutonby/openshorts
 Ruta original: layout_ranges.py (write, read, normalise, split_ranges, in_split).
 Copyright (c) 2024 OpenShorts — Licencia MIT (ver media/vendor/NOTICE.md).
-Cambios: rutas con pathlib y escritura atómica; sin `remap` (no hay rerender
-por concatenación).
+Cambios: rutas con pathlib y escritura atómica; `remap` reescrito para el
+recorte rápido del estudio (tramos sacados de un reencuadre ya hecho).
 
 Los tiempos están en la línea de tiempo del clip, la misma de los subtítulos.
 En los tramos SPLIT el generador ASS centra las palabras en la unión (\\an5).
@@ -64,3 +64,24 @@ def shift(ranges, offset: float) -> list[dict]:
     """Desplaza los tramos (p. ej. al anteponer la frase más fuerte)."""
     return normalise([{**r, "start": r["start"] + offset, "end": r["end"] + offset}
                       for r in normalise(ranges)])
+
+
+def remap(ranges, mapping) -> list[dict]:
+    """Tramos de diseño de un video base → video recortado de él.
+
+    ``mapping`` son los tramos ``(inicio, fin)`` del base que forman el nuevo
+    video, en orden. Los tramos contiguos del mismo diseño se funden."""
+    src = normalise(ranges)
+    out: list[dict] = []
+    offset = 0.0
+    for bs, be in mapping:
+        for r in src:
+            s, e = max(r["start"], bs), min(r["end"], be)
+            if e > s:
+                item = {"start": s - bs + offset, "end": e - bs + offset, "layout": r["layout"]}
+                if out and out[-1]["layout"] == item["layout"] and abs(out[-1]["end"] - item["start"]) < 1e-3:
+                    out[-1]["end"] = item["end"]
+                else:
+                    out.append(item)
+        offset += be - bs
+    return normalise(out)

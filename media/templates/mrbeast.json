@@ -1,0 +1,30 @@
+{
+  "id": "mrbeast",
+  "name": "MrBeast",
+  "description": "Anton enorme en amarillo, palabra activa en rojo, dos palabras por vez y emojis.",
+  "font": "Anton",
+  "size": 110,
+  "uppercase": true,
+  "primary": "#FFE600",
+  "highlight": "#FF2D2D",
+  "emphasis": "#FFFFFF",
+  "outline": "#000000",
+  "outline_width": 7,
+  "shadow": 3,
+  "words_per_group": 2,
+  "max_chars": 14,
+  "margin_v": 640,
+  "animation": "color",
+  "entrance": "pop",
+  "emoji": true,
+  "hook": {
+    "font": "Anton",
+    "size": 78,
+    "uppercase": true,
+    "text": "#FFFFFF",
+    "box": "#FF2D2D",
+    "accent": "#FFE600",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}

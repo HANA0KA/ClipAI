@@ -1,46 +1,69 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
-import { Toggle as TogglePrimitive } from "radix-ui"
-
-const toggleVariants = cva(
-  "group/toggle inline-flex items-center justify-center gap-1 rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 aria-pressed:bg-muted data-[state=on]:bg-muted dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import * as Primitive from "@radix-ui/react-toggle";
+import { useMorph } from "@/lib/cojeev-motion/use-morph";
+import { useFlowPress } from "@/lib/cojeev-motion/flow-press";
+import {
+  controlRadiusStyle,
+  type ControlRadius,
+} from "@/lib/cojeev/control-appearance";
+export const toggleVariants = cva(
+  "v-toggle [place-items:center] [border-radius:var(--r-pill)] [font-size:var(--fs-control)] [display:inline-flex] [align-items:center] [justify-content:center] [height:40px] [min-width:40px] [padding:0_var(--s-4)] [gap:var(--s-2)] [background:var(--v-canvas)] [color:var(--v-text-2)] [font-weight:var(--fw-medium)] [box-shadow:inset_0_0_0_1px_var(--v-edge)] [cursor:pointer]",
   {
     variants: {
+      size: { default: "", sm: "-sm !h-[var(--ctl-sm)] !min-w-[var(--ctl-sm)] !px-[var(--s-3)] !text-[length:var(--fs-small)]" },
       variant: {
-        default: "bg-transparent",
-        outline: "border border-input bg-transparent hover:bg-muted",
-      },
-      size: {
-        default:
-          "h-8 min-w-8 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        sm: "h-7 min-w-7 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 min-w-9 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        default: "",
+        pressed: "-pressed",
+        pink: "-pink",
+        circle: "-circle w-10 px-0 rounded-full text-[length:var(--fs-meta)] font-semibold",
       },
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-)
-
-function Toggle({
+    defaultVariants: { variant: "default", size: "default" },
+  },
+);
+export type ToggleProps = React.ComponentProps<typeof Primitive.Root> &
+  VariantProps<typeof toggleVariants> & {
+    appearance?: "tool" | "bookmark" | "preference";
+    radius?: ControlRadius;
+  };
+export function Toggle({
+  ref,
   className,
-  variant = "default",
-  size = "default",
+  variant,
+  size,
+  appearance,
+  radius,
+  style,
   ...props
-}: React.ComponentProps<typeof TogglePrimitive.Root> &
-  VariantProps<typeof toggleVariants>) {
+}: ToggleProps) {
+  const morphRef = useMorph<HTMLButtonElement>("buttons", ref);
+  const flowRef = useFlowPress(morphRef);
   return (
-    <TogglePrimitive.Root
+    <Primitive.Root
+      ref={flowRef}
       data-slot="toggle"
-      className={cn(toggleVariants({ variant, size, className }))}
+      data-part="root"
+      data-toggle=""
+      data-appearance={appearance}
+      data-morph={appearance ? "both" : undefined}
+      data-r={appearance ? "css" : undefined}
+      className={cn(toggleVariants({ variant, size }), className)}
+      style={{ ...controlRadiusStyle(radius), ...style }}
       {...props}
     />
-  )
+  );
 }
-
-export { Toggle, toggleVariants }
+export type ToggleWellProps = React.ComponentProps<"div">;
+export function ToggleWell({ className, ...props }: ToggleWellProps) {
+  return (
+    <div
+      data-slot="toggle-well"
+      className={cn("v-togglewell", className)}
+      {...props}
+    />
+  );
+}

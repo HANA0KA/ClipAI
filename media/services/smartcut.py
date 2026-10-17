@@ -1,6 +1,6 @@
-"""Corte inteligente opcional: quitar silencios largos y muletillas (plan 6.6.5).
+"""Corte inteligente opcional: quitar silencios largos y muletillas.
 
-Escrito desde cero (ClipPyMe usa el binario auto-editor; aquí basta ffmpeg):
+Solo con ffmpeg:
 se calculan los tramos a conservar y se aplican con `select`/`aselect` en la
 misma pasada del render, DESPUÉS de quemar los subtítulos (orden del plan:
 recorte → reencuadre → subtítulos → corte inteligente → gancho → audio), así

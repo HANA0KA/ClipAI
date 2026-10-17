@@ -1,4 +1,4 @@
-"""Segmentación, candidatos, señales, puntaje y NMS (plan 6.3)."""
+"""Segmentación, candidatos, señales, puntaje y NMS."""
 import numpy as np
 
 from media.services import candidates as cm
@@ -170,4 +170,4 @@ def test_locate_phrase_and_prepend_span():
 def test_heuristic_kit_has_all_fields():
     kit = heuristic_kit([{"text": "¿Por qué ahorrar 10 euros al mes cambia tu vida?"},
                          {"text": "El ahorro compuesto es la clave del dinero."}])
-    assert kit["title"].endswith("#Shorts") and kit["hook"] and "#shorts" in kit["hashtags"]
+    assert kit["title"] == kit["hook"] and kit["hook"] and "#shorts" in kit["hashtags"]  # el gancho es el título

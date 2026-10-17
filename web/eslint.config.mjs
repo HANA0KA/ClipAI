@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Código de cojeev-ui (MIT) copiado con shadcn: se conserva tal cual, con su estilo.
+    "lib/cojeev/**",
+    "lib/cojeev-motion/**",
   ]),
 ]);
 

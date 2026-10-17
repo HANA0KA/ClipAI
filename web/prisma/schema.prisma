@@ -1,4 +1,4 @@
-// ClipAI — modelo de datos (plan, sección 5).
+// ClipAI — modelo de datos.
 // Un único archivo SQLite en data/app.db compartido con el servicio Python
 // (media/services/db.py), que lo lee y escribe con sqlite3 en modo WAL.
 // Los datos pesados (transcripción, subtítulos, trayectoria del recorte) viven
@@ -15,7 +15,7 @@ datasource db {
 
 model Project {
   id               String   @id @default(cuid())
-  sourceType       String // "youtube" | "upload"
+  sourceType       String // "youtube" | "kick" | "upload"
   sourceUrl        String?
   title            String?
   durationSec      Int?
@@ -30,53 +30,66 @@ model Project {
   llmProvider      String? // gemini:<modelo> | openai:<modelo> | heuristic
   thumbPath        String?
   sourceDeleted    Boolean  @default(false) // "Limpiar" borró source.mp4 y audio.wav
+  aiCostUsd        Float    @default(0) // costo estimado de IA (análisis), USD de lista
+  aiTokens         Int      @default(0) // tokens de entrada + salida + razonamiento
+  aiCostEstimated  Boolean  @default(false) // algún modelo sin precio conocido: el costo es aproximado
+  rangeStartSec    Float? // solo se descargó el tramo [inicio, fin] del video (directos largos de Kick); los tiempos del proyecto cuentan desde el inicio del tramo
+  rangeEndSec      Float?
+  templateId       String? // plantilla de subtítulos del proyecto; null = automática (media/services/subtitle_style.py)
   clips            Clip[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
 }
 
 model Clip {
-  id              String    @id @default(cuid())
-  projectId       String
-  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rank            Int       @default(0)
-  startSec        Float
-  endSec          Float
-  score           Int
-  reason          String
-  hook            String
-  title           String // título para redes (con #Shorts)
-  description     String
-  hashtags        String // "#a #b #c"
-  templateId      String    @default("bold-yellow")
-  captionsPath    String? // JSON con palabras (editadas o pulidas con Whisper)
-  cropPath        String? // JSON con diseño y recorte por escena
-  renderStatus    String    @default("NONE") // NONE | QUEUED | RUNNING | DONE | FAILED
-  renderError     String?
-  outputPath      String? // MP4 final
-  thumbPath       String?
-  tiktokDraft     Boolean   @default(false)
-  postedAt        DateTime? // lo marcas tú al subirlo
-  topic           Int       @default(0)
-  bestLine        String? // frase más fuerte citada por el juez
-  bestLineStart   Float?
-  bestLineEnd     Float?
-  prependBestLine Boolean   @default(false) // anteponer 2–4 s de la frase más fuerte
-  layoutMode      String    @default("auto") // auto | track | split | wide | off
-  smartCut        Boolean   @default(false)
-  signals         String? // JSON: señales y ejes del juez
-  qaWarnings      String? // JSON: avisos de la revisión de calidad
-  publishStatus   String? // QUEUED | SCHEDULED | DONE | FAILED
-  publishInfo     String? // JSON: proveedor, url, error
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rank             Int       @default(0)
+  startSec         Float
+  endSec           Float
+  score            Int
+  reason           String
+  hook             String // gancho en pantalla (limpio: sin comillas ni hashtags, ≤ 10 palabras)
+  hookType         String? // question | statement | statistic | story | contrast
+  title            String // título para redes (con #Shorts)
+  description      String
+  hashtags         String // "#a #b #c"
+  hashtagSets      String? // JSON: hashtags sugeridos por red {tiktok, instagram, youtube}
+  templateId       String    @default("bold-yellow")
+  captionsPath     String? // JSON con palabras (editadas o pulidas con Whisper)
+  cropPath         String? // JSON con diseño y recorte por escena
+  renderStatus     String    @default("NONE") // NONE | QUEUED | RUNNING | DONE | FAILED
+  renderError      String?
+  renderProgress   Int       @default(0) // 0–100 mientras renderiza
+  renderedRevision Int       @default(0) // editRevision que tiene el MP4 actual
+  outputPath       String? // MP4 final
+  thumbPath        String?
+  coverPath        String? // portada JPG con el gancho en grande (cover.jpg)
+  cover            String? // JSON: ajustes de la portada {text, time, position, style, dim}
+  postedAt         DateTime? // lo marcas tú al subirlo
+  topic            Int       @default(0)
+  bestLine         String? // frase más fuerte citada por el juez
+  bestLineStart    Float?
+  bestLineEnd      Float?
+  prependBestLine  Boolean   @default(false) // anteponer 2–4 s de la frase más fuerte
+  layoutMode       String    @default("auto") // auto | track | split | wide | off
+  smartCut         Boolean   @default(false)
+  edit             String? // JSON del estudio: tramos, encuadre, efectos, audio, exportación, fuente
+  editRevision     Int       @default(0) // sube en cada guardado; 409 si otra pestaña guardó antes
+  signals          String? // JSON: señales y ejes del juez
+  qaWarnings       String? // JSON: avisos de la revisión de calidad
+  publishStatus    String? // QUEUED | SCHEDULED | DONE | FAILED
+  publishInfo      String? // JSON: proveedor, url, error
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
 
   @@index([projectId])
 }
 
 model Job {
   id        String    @id @default(cuid())
-  type      String // download | transcribe | analyze | render | tiktok_draft | publish
+  type      String // download | transcribe | analyze | render | publish
   targetId  String // id de Project o Clip
   status    String    @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED
   attempts  Int       @default(0)

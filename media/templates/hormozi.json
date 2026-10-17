@@ -1,0 +1,31 @@
+{
+  "id": "hormozi",
+  "name": "Hormozi",
+  "description": "Mayúsculas gruesas, píldora verde detrás de la palabra activa y palabras clave en amarillo.",
+  "font": "Montserrat ExtraBold",
+  "size": 88,
+  "uppercase": true,
+  "primary": "#FFFFFF",
+  "highlight": "#FFFFFF",
+  "emphasis": "#FFE600",
+  "outline": "#000000",
+  "outline_width": 6,
+  "shadow": 0,
+  "words_per_group": 3,
+  "max_chars": 16,
+  "margin_v": 620,
+  "animation": "box",
+  "box_color": "#16A34A",
+  "entrance": "pop",
+  "emoji": true,
+  "hook": {
+    "font": "Montserrat ExtraBold",
+    "size": 60,
+    "uppercase": true,
+    "text": "#FFFFFF",
+    "box": "#16A34A",
+    "accent": "#FFE600",
+    "margin_v": 260,
+    "duration": 3.0
+  }
+}

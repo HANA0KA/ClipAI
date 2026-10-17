@@ -1,171 +1,106 @@
-"""TextTiling léxico (sin IA): segmentación temática de la transcripción.
+"""Segmentación temática léxica (sin IA), al estilo TextTiling de Hearst (1997).
 
-Copiado de ClipPyMe — https://github.com/fralapo/clippyme
-Ruta original: src/clippyme/pipeline/texttiling_ops.py (portado a su vez de
-ClipsAI `clip/texttiler.py`, MIT).
-Copyright (c) 2026 ClippyMe — Licencia MIT (ver media/vendor/NOTICE.md).
-Cambios: stopwords en español añadidas; se quita `find_topic_clips` (los
-candidatos los genera `services/candidates.py` según el plan 6.3).
-
-Se usa como respaldo de `services/segmentation.py` cuando el modelo de
-embeddings no está disponible (EMBEDDINGS_ENABLED=0 o sin descarga).
+Se usa como respaldo de `services/segmentation.py` cuando el modelo de embeddings no
+está disponible (EMBEDDINGS_ENABLED=0 o sin descarga). Pasos: cada bloque de texto se
+reduce a sus palabras con contenido; se mide qué tanto vocabulario comparten las
+ventanas a ambos lados de cada hueco entre bloques; esa curva se suaviza; un valle
+profundo (poca cohesión entre dos zonas muy cohesionadas) marca un cambio de tema.
 """
 from __future__ import annotations
 
 import math
 import re
 from collections import Counter
-from typing import Dict, List, Sequence, Tuple
+from collections.abc import Sequence
 
-# Small multilingual stop-word set (EN + IT de ClippyMe; ES añadido para ClipAI).
-# Dropping these sharpens lexical-cohesion signal: function words co-occur in
-# every block and would otherwise wash out the topic-specific term overlap.
+# Palabras funcionales (español primero, luego inglés). Se descartan porque aparecen en
+# todos los bloques y ahogarían la señal del vocabulario propio de cada tema.
 _STOPWORDS = frozenset(
-    """
-    a an the of to in is it and or but for on at by with as be this that these those
-    i you he she we they me him her us them my your his our their its do does did not
-    no yes so if then than too very can will just have has had was were are am been
-    il lo la i gli le un uno una di a da in con su per tra fra e o ma se che non
-    è sono ho hai ha abbiamo avete hanno questo questa questi queste quello quella
-    mi ti ci vi si come anche più meno molto poco
-    el los las del al un una unos unas y o pero que en de con por para como más
-    es son fue ser está están estoy era hay muy ya lo le les se su sus mi mis tu tus
-    yo tú él ella nosotros ellos esto eso esta ese este aquí ahí sí también porque
-    cuando donde qué cómo entonces pues bueno tan todo todos nada algo
-    """.split()
+    ("el la los las un una unos unas lo al del de y e o u ni que qué quien quién cual cuál "
+     "cuando cuándo donde dónde como cómo cuanto porque pues pero sino aunque si no sí ya "
+     "muy más menos tan tanto todo todos toda todas nada algo alguien nadie otro otra otros "
+     "en a con por para sin sobre entre hasta desde hacia según tras ante bajo "
+     "yo tú vos usted él ella nosotros ustedes ellos ellas me te se nos os le les mi mis tu "
+     "tus su sus este esta estos estas ese esa esos esas esto eso aquí ahí allí también "
+     "ser es son fue era eran soy eres somos sido estar está están estoy estaba hay había "
+     "haber he has ha han hemos tener tengo tiene tienen ir va van voy vamos bueno entonces "
+     "the an of to in is it and or but for on at by with as be this that these those "
+     "i you he she we they him her us them my your his our their its do does did not "
+     "no yes so if then than too very can will just have had was were are am been").split()
 )
 
-_TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)  # unicode letters, no digits/punct
+_WORD = re.compile(r"[^\W\d_]+")  # letras unicode, sin dígitos ni signos
 
 
-def tokenize(text: str) -> List[str]:
-    """Lower-case unicode word tokens with stop-words removed."""
-    return [t for t in (m.group(0).lower() for m in _TOKEN_RE.finditer(text or "")) if t not in _STOPWORDS]
+def tokenize(text: str) -> list[str]:
+    """Palabras en minúscula, sin dígitos y sin palabras funcionales."""
+    words = (m.group(0).lower() for m in _WORD.finditer(text or ""))
+    return [w for w in words if w not in _STOPWORDS]
 
 
-def _cosine(a: Counter, b: Counter) -> float:
-    """Cosine similarity of two term-frequency Counters (0.0 if either empty)."""
-    if not a or not b:
+def _cosine(left: Counter, right: Counter) -> float:
+    shared = left.keys() & right.keys()
+    if not shared:
         return 0.0
-    # iterate the smaller dict
-    if len(a) > len(b):
-        a, b = b, a
-    dot = sum(cnt * b.get(term, 0) for term, cnt in a.items())
-    if dot == 0:
-        return 0.0
-    na = math.sqrt(sum(c * c for c in a.values()))
-    nb = math.sqrt(sum(c * c for c in b.values()))
-    return dot / (na * nb)
+    dot = sum(left[t] * right[t] for t in shared)
+    norms = math.sqrt(sum(v * v for v in left.values())) * math.sqrt(sum(v * v for v in right.values()))
+    return dot / norms
 
 
-def gap_scores(block_tokens: Sequence[Sequence[str]], k: int) -> List[float]:
-    """Cosine similarity across each gap between consecutive blocks.
+def _pooled(blocks: Sequence[Sequence[str]], start: int, stop: int) -> Counter:
+    pooled: Counter = Counter()
+    for block in blocks[max(0, start):min(len(blocks), stop)]:
+        pooled.update(block)
+    return pooled
 
-    For gap ``i`` (between block ``i`` and ``i+1``) the left window pools the
-    token counts of blocks ``[i-k+1 .. i]`` and the right window pools
-    ``[i+1 .. i+k]`` (clamped to the ends), mirroring ClipsAI's ``k``-window
-    pooling but with bag-of-words term frequencies instead of pooled embeddings.
-    Returns ``len(block_tokens) - 1`` scores (empty if fewer than 2 blocks).
-    """
-    n = len(block_tokens)
-    if n < 2:
+
+def _cohesion_curve(blocks: Sequence[Sequence[str]], window: int) -> list[float]:
+    """Similitud entre las ``window`` bloques antes y después de cada hueco."""
+    return [_cosine(_pooled(blocks, gap + 1 - window, gap + 1), _pooled(blocks, gap + 1, gap + 1 + window))
+            for gap in range(len(blocks) - 1)]
+
+
+def _smooth(curve: Sequence[float], width: int) -> list[float]:
+    """Media móvil centrada; los bordes se extienden con su último valor."""
+    if width < 3 or len(curve) < width:
+        return list(curve)
+    reach = width // 2
+    padded = [curve[0]] * reach + list(curve) + [curve[-1]] * reach
+    return [sum(padded[i:i + 2 * reach + 1]) / (2 * reach + 1) for i in range(len(curve))]
+
+
+def _climb(curve: Sequence[float], start: int, step: int) -> float:
+    """Cima a la que se llega subiendo desde ``start`` mientras no baje la curva."""
+    best, i = curve[start], start + step
+    while 0 <= i < len(curve) and curve[i] >= best:
+        best = curve[i]
+        i += step
+    return best
+
+
+def _valley_depths(curve: Sequence[float]) -> list[float]:
+    return [(_climb(curve, i, -1) - curve[i]) + (_climb(curve, i, +1) - curve[i]) for i in range(len(curve))]
+
+
+def _threshold(depths: Sequence[float], policy: str) -> float:
+    mean = sum(depths) / len(depths)
+    spread = math.sqrt(sum((d - mean) ** 2 for d in depths) / len(depths))
+    return {"average": mean, "low": mean - spread}.get(policy, mean + spread)
+
+
+def _boundaries(depths: Sequence[float], policy: str) -> list[int]:
+    """Huecos donde la profundidad supera el umbral y es un máximo local (no una meseta)."""
+    if not depths:
         return []
-    k = max(1, k)
-    scores: List[float] = []
-    for i in range(n - 1):
-        left = Counter()
-        for j in range(max(0, i - k + 1), i + 1):
-            left.update(block_tokens[j])
-        right = Counter()
-        for j in range(i + 1, min(n, i + 1 + k)):
-            right.update(block_tokens[j])
-        scores.append(_cosine(left, right))
-    return scores
-
-
-def smooth_scores(scores: Sequence[float], width: int) -> List[float]:
-    """Centered flat (moving-average) smoothing, faithful to TextTiling's smooth().
-
-    ``width`` < 3 (or longer than the series) is a no-op. Window is normalized
-    and applied with edge clamping so the series length is preserved.
-    """
-    n = len(scores)
-    if width < 3 or n < width:
-        return list(scores)
-    half = width // 2
-    out: List[float] = []
-    for i in range(n):
-        lo, hi = i - half, i + half
-        acc = 0.0
-        for j in range(lo, hi + 1):
-            jj = 0 if j < 0 else (n - 1 if j >= n else j)  # clamp edges
-            acc += scores[jj]
-        out.append(acc / (2 * half + 1))
-    return out
-
-
-def depth_scores(gaps: Sequence[float]) -> List[float]:
-    """Valley depth at each gap: ``(left_peak - gap) + (right_peak - gap)``.
-
-    Peaks are found by walking outward while scores are non-decreasing, exactly
-    as in ClipsAI's ``_calc_depth_scores``. A deep valley (low similarity flanked
-    by high-similarity peaks) marks a strong topic boundary.
-    """
-    n = len(gaps)
-    depths: List[float] = [0.0] * n
-    for i in range(n):
-        lpeak = gaps[i]
-        j = i
-        while j - 1 >= 0 and gaps[j - 1] >= lpeak:
-            lpeak = gaps[j - 1]
-            j -= 1
-        rpeak = gaps[i]
-        j = i
-        while j + 1 < n and gaps[j + 1] >= rpeak:
-            rpeak = gaps[j + 1]
-            j += 1
-        depths[i] = (lpeak - gaps[i]) + (rpeak - gaps[i])
-    return depths
-
-
-def _cutoff(depths: Sequence[float], policy: str) -> float:
-    n = len(depths)
-    if n == 0:
-        return 0.0
-    mean = sum(depths) / n
-    var = sum((d - mean) ** 2 for d in depths) / n
-    std = math.sqrt(var)
-    if policy == "average":
-        return mean
-    if policy == "low":
-        return mean - std
-    return mean + std  # "high" (default)
-
-
-def identify_boundaries(depths: Sequence[float], cutoff_policy: str = "high") -> List[int]:
-    """Gap indices that are local depth maxima above the cutoff.
-
-    A gap ``i`` is a boundary when ``depth > cutoff`` AND it is ``>=`` both
-    neighbours AND it is not a flat plateau equal to both neighbours — the exact
-    four-condition test from ClipsAI's ``_identify_boundaries``. The returned
-    indices are *gap* indices, i.e. a boundary at ``i`` means "split after block i".
-    """
-    n = len(depths)
-    if n == 0:
-        return []
-    cutoff = _cutoff(depths, cutoff_policy)
-    out: List[int] = []
-    for i in range(n):
-        left = depths[i - 1] if i > 0 else float("-inf")
-        right = depths[i + 1] if i < n - 1 else float("-inf")
-        if (
-            depths[i] > cutoff
-            and depths[i] >= left
-            and depths[i] >= right
-            and not (depths[i] == left and depths[i] == right)
-        ):
-            out.append(i)
-    return out
+    floor = _threshold(depths, policy)
+    low = float("-inf")
+    found = []
+    for i, depth in enumerate(depths):
+        before = depths[i - 1] if i else low
+        after = depths[i + 1] if i + 1 < len(depths) else low
+        if depth > floor and depth >= before and depth >= after and not (depth == before == after):
+            found.append(i)
+    return found
 
 
 def segment_indices(
@@ -173,28 +108,18 @@ def segment_indices(
     k: int = 7,
     smoothing_width: int = 3,
     cutoff_policy: str = "high",
-) -> List[Tuple[int, int]]:
-    """Group blocks into topic segments → list of inclusive ``(start, end)`` block-index spans.
-
-    Runs the full lexical TextTiling chain (gap → smooth → depth → boundaries)
-    and converts the gap boundaries into contiguous block spans covering every
-    block. ``k`` is auto-shrunk when the series is short (``> n/5`` is clamped),
-    mirroring ClipsAI's guard so tiny transcripts still produce a sane result.
-    """
-    n = len(block_tokens)
-    if n <= 1:
-        return [(0, n - 1)] if n == 1 else []
-    if k > max(1, n // 5):
-        k = max(1, n // 5)
-    gaps = gap_scores(block_tokens, k)
-    gaps = smooth_scores(gaps, smoothing_width)
-    depths = depth_scores(gaps)
-    bounds = identify_boundaries(depths, cutoff_policy)
-    spans: List[Tuple[int, int]] = []
-    start = 0
-    for b in bounds:
-        spans.append((start, b))  # gap b → split after block b
-        start = b + 1
-    if start <= n - 1:
-        spans.append((start, n - 1))
-    return spans
+) -> list[tuple[int, int]]:
+    """Agrupa bloques en temas: lista de tramos ``(primero, último)`` inclusivos que
+    cubren todos los bloques. ``k`` es el tamaño de la ventana y se reduce a n/5 en
+    transcripciones cortas; ``cutoff_policy``: ``high`` | ``average`` | ``low``."""
+    total = len(block_tokens)
+    if total == 0:
+        return []
+    if total == 1:
+        return [(0, 0)]
+    window = min(max(1, k), max(1, total // 5))
+    curve = _smooth(_cohesion_curve(block_tokens, window), smoothing_width)
+    cuts = _boundaries(_valley_depths(curve), cutoff_policy)
+    starts = [0] + [c + 1 for c in cuts]
+    ends = cuts + [total - 1]
+    return [(a, b) for a, b in zip(starts, ends) if a <= b]

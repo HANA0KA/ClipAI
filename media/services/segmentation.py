@@ -1,11 +1,11 @@
-"""Segmentación temática de las frases (plan 6.3, paso 2).
+"""Segmentación temática de las frases.
 
 TextTiling con embeddings: cada frase → vector con un modelo multilingüe local
 (`paraphrase-multilingual-MiniLM-L12-v2`); se comparan bloques de k frases a
 cada lado de cada punto y se corta donde la similitud cae por debajo de
 media − 1 desviación y es un mínimo local. Los capítulos del video son cortes
 obligatorios. Si el modelo no está disponible se usa el TextTiling léxico de
-`texttiling_ops` (ClipPyMe).
+`texttiling_ops`.
 """
 from __future__ import annotations
 

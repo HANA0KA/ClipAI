@@ -2,8 +2,9 @@
 
     uvicorn media.main:app --host 127.0.0.1 --port 8000
 
-Endpoints (plan 7): POST /jobs · GET /files/... · además control de proyectos,
-limpieza, descarga del MP4 final, plantillas, salud y conexión con TikTok.
+Endpoints: POST /jobs · GET /files/... · además control de proyectos,
+limpieza, descarga del MP4 final, plantillas, fuentes, línea de tiempo del
+estudio, cancelación de renders, salud y conexión con TikTok.
 Next.js (web/) es quien crea proyectos y clips en SQLite; aquí se procesan.
 """
 from __future__ import annotations
@@ -12,20 +13,20 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from media.config import settings
 from media.errors import PermanentError
-from media.services import ass_builder, db, publisher
-from media.services.ffmpeg import ffmpeg_bin, has_libass
-from media.worker import CLIP_JOBS, PROJECT_JOBS, Worker, control_project
+from media.services import ass_builder, cover, db, emoji_art, fonts, hashtags, publisher, timeline_assets
+from media.services.local_guard import LocalGuard
+from media.services.ffmpeg import FFmpegError, ffmpeg_bin, has_libass
+from media.worker import CLIP_JOBS, PROJECT_JOBS, Worker, cancel_render, control_project
 
 # Sin barras de progreso de Hugging Face en la terminal (la UI ya muestra el avance).
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -62,9 +63,13 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="ClipAI media", version="1.0", lifespan=lifespan)
+# Rechaza Host/Origin ajenos (CSRF y DNS rebinding); ver services/local_guard.py.
+app.add_middleware(LocalGuard)
 settings().projects_dir.mkdir(parents=True, exist_ok=True)
 # Videos, clips y miniaturas de data/projects (StaticFiles admite Range para el <video>).
 app.mount("/files/projects", StaticFiles(directory=settings().projects_dir), name="files")
+# Fuentes (incluidas + subidas) para previsualizarlas en la web con @font-face.
+app.mount("/files/fonts", StaticFiles(directory=fonts.fonts_dir()), name="fonts")
 
 
 class JobIn(BaseModel):
@@ -77,9 +82,15 @@ class ControlIn(BaseModel):
     action: str
 
 
-class TikTokCodeIn(BaseModel):
-    code: str
-    state: str
+class CoverIn(BaseModel):
+    """Ajustes de la portada; solo cambian las claves que llegan. ``text``
+    y ``time`` en null vuelven a lo automático (el gancho, el mejor cuadro)."""
+    text: str | None = Field(default=None, max_length=200)
+    time: float | None = Field(default=None, ge=0)
+    position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+    style: str | None = Field(default=None, pattern=r"^(outline|box)$")
+    dim: bool | None = None
+    reset: bool = False
 
 
 def _err(exc: Exception, status: int = 400) -> HTTPException:
@@ -113,6 +124,9 @@ def health() -> dict:
         "llm": llm, "llmConfigured": s.llm_configured,
         "whisper": f"{s.whisper_engine}:{s.whisper_model}/{s.whisper_device}",
         "autoRender": s.auto_render,
+        "clipMinSec": s.clip_min_sec, "clipMaxSec": s.clip_max_sec,
+        "emoji": emoji_art.available(),
+        "hashtagsBase": hashtags.base_tags(s.hashtags_base), "hashtagsCreator": s.hashtags_creator,
         "worker": {"alive": worker.is_alive(),
                    "current": {"type": current["type"], "targetId": current["targetId"]} if current else None},
         "queue": counts,
@@ -206,15 +220,113 @@ def _safe_filename(title: str) -> str:
     return base.replace("?", "").replace("¿", "").replace("!", "").replace("¡", "") + ".mp4"
 
 
+def _download_base(name: str | None) -> str | None:
+    """Nombre base que manda la web («03 - ¡Le trajo un conejo! 🐰»; el mismo
+    para el video y su portada): con sus emojis y signos, sin lo que los
+    sistemas de archivos no aceptan (separadores de ruta, ``: * ? " < > |``)."""
+    base = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", name or "")
+    base = re.sub(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufe0e\ufe0f\ufeff]", "", base)
+    base = re.sub(r"\s+", " ", base).strip(" .-")[:100].strip(" .-")
+    return base or None
+
+
+def _data_file(rel: str):
+    """Archivo dentro de ``data/``; 404 si no existe o si la ruta guardada se sale de ahí."""
+    root = settings().data_dir.resolve()
+    path = (root / rel).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise HTTPException(404, "Archivo no encontrado")
+    return path
+
+
 @app.get("/download/clip/{clip_id}")
-def download_clip(clip_id: str):
+def download_clip(clip_id: str, name: str | None = None):
     clip = db.get_clip(clip_id)
     if clip is None or not clip.get("outputPath"):
         raise HTTPException(404, "El clip no está renderizado")
-    path = settings().data_dir / clip["outputPath"]
-    if not path.exists():
-        raise HTTPException(404, "Archivo no encontrado")
-    return FileResponse(path, media_type="video/mp4", filename=_safe_filename(clip["title"]))
+    path = _data_file(clip["outputPath"])
+    base = _download_base(name)
+    return FileResponse(path, media_type="video/mp4",
+                        filename=f"{base}.mp4" if base else _safe_filename(clip.get("hook") or clip["title"]))
+
+
+@app.post("/clips/{clip_id}/cover")
+def clip_cover(clip_id: str, body: CoverIn) -> dict:
+    """Guarda los ajustes de la portada y la vuelve a generar (≈ 0,5 s; el
+    primer cuadro automático tarda unos segundos más)."""
+    import json as _json
+
+    clip = db.get_clip(clip_id)
+    if clip is None:
+        raise HTTPException(404, "Clip no encontrado")
+    patch = {k: getattr(body, k) for k in body.model_fields_set if k in cover.DEFAULTS}
+    wanted = cover.parse(None) if body.reset else cover.merge(clip.get("cover"), patch)
+    cfolder = settings().projects_dir / clip["projectId"] / "clips" / clip_id
+    try:
+        made = cover.make_cover({**clip, "cover": wanted}, cfolder)
+    except cover.CoverError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except FFmpegError as exc:
+        logging.getLogger("media").warning("portada de %s: %s", clip_id, exc)
+        raise HTTPException(500, "No se pudo generar la portada (ffmpeg). Revisa logs/media.log.") from exc
+    rel = str(made["path"].resolve().relative_to(settings().data_dir.resolve()))
+    db.update_clip(clip_id, cover=_json.dumps(wanted, ensure_ascii=False), coverPath=rel)
+    return {"coverPath": rel, "cover": wanted, "time": made["time"], "auto": made["auto"]}
+
+
+@app.get("/download/cover/{clip_id}")
+def download_cover(clip_id: str, name: str | None = None):
+    clip = db.get_clip(clip_id)
+    if clip is None or not clip.get("coverPath"):
+        raise HTTPException(404, "El clip aún no tiene portada")
+    path = _data_file(clip["coverPath"])
+    base = _download_base(name)
+    return FileResponse(path, media_type="image/jpeg",
+                        filename=cover.filename(clip, base))
+
+
+@app.get("/source-info")
+def source_info(url: str, tab: str = "videos") -> dict:
+    """Comprueba el enlace de un nuevo proyecto antes de crearlo: de un VOD de
+    Kick devuelve título, canal y duración (o dice que ya no existe: Kick los
+    borra a los pocos días); de un canal de Kick, sus VODs disponibles; de un
+    canal de YouTube, sus videos (``tab``: videos | streams)."""
+    from media.services import sources
+
+    src = sources.parse(url)
+    if src is None:
+        raise HTTPException(400, "Pega el enlace de un video de YouTube o de un VOD de Kick.")
+    try:
+        if src["type"] == "kick" and src["kind"] == "video":
+            return sources.info(url, settings().max_video_minutes)
+        if src["type"] == "kick" and src["kind"] == "channel":
+            return {"type": "kick", "kind": "channel", **sources.kick_channel_vods(src["id"])}
+        if src["type"] == "youtube" and src["kind"] == "channel":
+            return {"type": "youtube", "kind": "channel",
+                    **sources.youtube_channel_videos(src["id"], tab, settings().max_video_minutes)}
+    except sources.SourceError as exc:
+        raise HTTPException(404 if sources.GONE in str(exc) or "No existe el canal" in str(exc) else 502, str(exc)) from exc
+    if src["type"] == "kick":
+        raise HTTPException(400, "Es un clip de Kick (dura menos de un minuto). Pega el VOD (kick.com/canal/videos/…) o el canal.")
+    return {"type": "youtube", "kind": src["kind"], "id": src["id"]}
+
+
+@app.get("/trending")
+def trending(q: str = "", period: str = "week", sort: str = "views", duration: str = "long", limit: int = 24,
+             refresh: bool = False, lang: str = "auto") -> dict:
+    """Videos de YouTube con potencial para clips (services/trending.py). Sin
+    ``q`` busca los temas de TRENDING_TOPICS. Tarda unos segundos la primera
+    vez (lee la ficha de cada candidato); después sale de la caché (30 min)."""
+    from media.services import trending as tr
+
+    if period not in tr.PERIODS or sort not in tr.SORTS or duration not in (*tr.DURATIONS, "any"):
+        raise HTTPException(400, "Periodo, orden o duración no válidos")
+    try:
+        out = tr.discover(q, period=period, sort=sort, duration=None if duration == "any" else duration,
+                          limit=max(1, min(48, limit)), refresh=refresh, lang=lang)
+    except tr.TrendingError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {**out, "topics": tr.default_topics(), "defaultLang": tr.resolve_lang("auto")}
 
 
 @app.get("/templates")
@@ -222,30 +334,115 @@ def templates() -> list[dict]:
     return ass_builder.list_templates()
 
 
-@app.get("/tiktok/auth-url")
-def tiktok_auth_url() -> dict:
+@app.post("/clips/{clip_id}/cancel-render")
+def clip_cancel_render(clip_id: str) -> dict:
     try:
-        return {"url": publisher.tiktok_auth_url()}
-    except publisher.PublishError as exc:
+        return cancel_render(worker, clip_id)
+    except PermanentError as exc:
+        raise _err(exc, 404)
+
+
+@app.get("/clips/{clip_id}/timeline")
+def clip_timeline(clip_id: str, start: float, end: float) -> dict:
+    """Miniaturas y forma de onda del video fuente entre start y end."""
+    clip = db.get_clip(clip_id)
+    if clip is None:
+        raise HTTPException(404, "Clip no encontrado")
+    project = db.get_project(clip["projectId"])
+    folder = settings().projects_dir / clip["projectId"]
+    if project is None or not (folder / "source.mp4").exists():
+        raise HTTPException(409, "El video fuente se borró con «Limpiar»: no hay línea de tiempo.")
+    if not (0 <= start < end) or end - start > 3 * 3600:
+        raise HTTPException(400, "Rango inválido")
+    cfolder = folder / "clips" / clip_id
+    cfolder.mkdir(parents=True, exist_ok=True)
+    data = timeline_assets.build(folder, cfolder, start, end, float(project.get("durationSec") or 0))
+    data["thumbs"] = f"projects/{clip['projectId']}/clips/{clip_id}/{data['thumbs']}"
+    return data
+
+
+class PublishTextIn(BaseModel):
+    hook: str | None = Field(None, max_length=300)
+    hashtags: str | None = Field(None, max_length=600)
+
+
+@app.post("/clips/{clip_id}/publish-text")
+def publish_text_for(clip_id: str, body: PublishTextIn) -> dict:
+    """Título, descripción y hashtags para publicar (con el creador del video original). ``hook`` y
+    ``hashtags`` opcionales: lo que se está editando en el estudio y todavía no se guardó."""
+    from media.tasks.publish import post_text
+
+    clip = db.get_clip(clip_id)
+    if clip is None:
+        raise HTTPException(404, "El clip no existe.")
+    return post_text(clip, body.hook, body.hashtags)
+
+
+@app.post("/clips/{clip_id}/hashtags")
+def clip_hashtags(clip_id: str) -> dict:
+    """Vuelve a sugerir los hashtags por red con lo que dice el clip AHORA
+    (sus tramos editados y sus palabras corregidas)."""
+    import json as _json
+    from collections import Counter
+
+    from media.services import edit_doc, texttiling_ops
+    from media.services.atomic import read_json
+    from media.services.llm import LLM, LLMError
+    from media.tasks.analyze import channel_tags
+
+    clip = db.get_clip(clip_id)
+    if clip is None:
+        raise HTTPException(404, "Clip no encontrado")
+    project = db.get_project(clip["projectId"]) or {}
+    folder = settings().projects_dir / clip["projectId"]
+    caps = read_json(folder / "clips" / clip_id / "captions.json", {}) or {}
+    parts = edit_doc.clip_parts(clip)
+    text = " ".join(w["w"] for a, b in parts for w in caps.get("words") or []
+                    if a <= (w["start"] + w["end"]) / 2 < b and str(w.get("w", "")).strip())
+    if not text:
+        raise HTTPException(409, "El clip no tiene palabras para sugerir hashtags.")
+    language = project.get("language") or "es"
+    transcript = read_json(folder / "transcript.json", {}) or {}
+    all_counts = Counter(texttiling_ops.tokenize(" ".join(w["w"] for w in transcript.get("words") or [])))
+    fallback = hashtags.heuristic_sets(text, all_counts, language)
+    video = hashtags.video_label(read_json(folder / "source.info.json", {}), project.get("title"))
+    sets, source = fallback, "heuristic"
+    llm = LLM()
+    if llm.available:
+        try:
+            got = llm.generate_list(hashtags.build_prompt(text, clip.get("hook") or clip.get("title") or "", clip.get("hook") or "",
+                                                          language, video), hashtags.HashtagSets)
+            sets = hashtags.complete(hashtags.clean_sets(got[0], language), fallback)
+            source = "llm"
+        except LLMError as exc:
+            logging.getLogger("media").warning("hashtags con IA fallaron; uso el respaldo: %s", exc)
+        finally:
+            db.add_ai_usage(clip["projectId"], llm.usage)
+    sets = hashtags.apply_niche(sets, *channel_tags(folder), prefer=video)
+    db.update_clip(clip_id, hashtagSets=_json.dumps(sets, ensure_ascii=False))
+    return {**sets, "source": source}
+
+
+@app.get("/fonts")
+def list_fonts() -> list[dict]:
+    return fonts.list_fonts()
+
+
+@app.post("/fonts")
+async def upload_font(request: Request, name: str) -> dict:
+    if int(request.headers.get("content-length") or 0) > fonts.MAX_BYTES:
+        raise HTTPException(413, "La fuente pesa más de 15 MB.")
+    data = await request.body()
+    try:
+        return fonts.add_font(name, data)
+    except fonts.FontError as exc:
         raise _err(exc)
 
 
-@app.post("/tiktok/token")
-def tiktok_token(body: TikTokCodeIn) -> dict:
+@app.delete("/fonts/{file}")
+def delete_font(file: str) -> dict:
     try:
-        return publisher.tiktok_exchange_code(body.code, body.state)
-    except publisher.PublishError as exc:
-        raise _err(exc)
-
-
-@app.get("/logs")
-def logs(lines: int = 200) -> dict:
-    path = settings().data_dir / "logs" / "media.log"
-    if not path.exists():
-        return {"lines": []}
-    out = subprocess.run(["tail", "-n", str(max(1, min(lines, 2000))), str(path)],
-                         capture_output=True, text=True).stdout
-    return {"lines": out.splitlines()}
-
-
-__all__ = ["app"]
+        fonts.delete_font(file)
+    except fonts.FontError as exc:
+        raise _err(exc, 404 if "no existe" in str(exc) else 400)
+    return {"ok": True}

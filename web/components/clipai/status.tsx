@@ -1,23 +1,28 @@
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { STATUS_LABEL } from "@/lib/format";
 import type { ProjectDTO } from "@/lib/types";
 
-const TONE: Record<string, string> = {
-  READY: "text-success border-success/40",
-  FAILED: "text-destructive border-destructive/40",
-  PAUSED: "text-muted-foreground border-border",
-  STOPPED: "text-muted-foreground border-border",
+// Semántica de cojeev: oliva = terminado, peligro = falló, ámbar suave = en curso, neutro = detenido.
+const TONE: Record<string, "olive" | "danger" | "default" | "pink-soft"> = {
+  READY: "olive",
+  FAILED: "danger",
+  PAUSED: "default",
+  STOPPED: "default",
 };
 
 export function StatusBadge({ status }: { status: string }) {
+  const variant = TONE[status] ?? "pink-soft";
+  const live = variant === "pink-soft";
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", TONE[status] ?? "text-primary border-primary/40")}>
+    <Badge variant={variant} className="gap-1.5">
+      {live && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-primary" />}
       {STATUS_LABEL[status] ?? status}
-    </span>
+    </Badge>
   );
 }
 
-// Las tres fases sí son una secuencia (plan 5): descarga 0–20, transcripción 20–60, análisis 60–100.
+// Las tres fases sí son una secuencia: descarga 0–20, transcripción 20–60, análisis 60–100.
 const PHASES = [
   { key: "DOWNLOADING", label: "Descarga", from: 0, to: 20 },
   { key: "TRANSCRIBING", label: "Transcripción", from: 20, to: 60 },
