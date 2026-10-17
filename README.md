@@ -10,7 +10,7 @@
 
 ### Míralo en 1 minuto
 
-<video src="https://github.com/HANA0KA/ClipAI/raw/main/docs/video/clipai.mp4" controls muted playsinline width="100%"></video>
+**[▶ Ver el video](https://github.com/HANA0KA/ClipAI/blob/main/docs/video/clipai.mp4)**
 
 *Del enlace a los clips listos para publicar, con capturas reales de la app (56 s). El material de ejemplo es de un stream ajeno, usado solo para mostrar la herramienta.*
 
