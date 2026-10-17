@@ -56,6 +56,9 @@ services:
     security_opt:
       - no-new-privileges:true
     user: "${CLIPAI_UID:-1000}:${CLIPAI_GID:-1000}"
+    # Permite llegar a Ollama/LM Studio del equipo con http://host.docker.internal:… (en Linux no existe solo).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - path: .env
         required: false

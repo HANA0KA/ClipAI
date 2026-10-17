@@ -4,15 +4,15 @@
 
 - **Local y privado:** la app, la base de datos y tus videos viven en tu máquina (`127.0.0.1`). Sin cuentas, sin nube propia, sin suscripción. Solo salen a internet la descarga del video, la consulta a la IA (si la activas) y, si la configuras, la publicación.
 - **Cada clip dura lo que su historia necesita** (gancho → contexto → desarrollo → remate), entre 1:00 y 2:30, sin relleno.
-- **Funciona sin pagar nada:** con la capa gratuita de la API de Gemini, con un modelo local, o incluso sin IA (modo de respaldo por heurísticas).
+- **Funciona sin pagar nada y con el proveedor que prefieras:** una clave de Gemini (capa gratuita), cualquier servicio compatible con OpenAI (OpenAI, OpenRouter, Groq, DeepSeek, Mistral…), un modelo local con Ollama, o incluso sin IA (modo de respaldo por heurísticas). Vertex AI es solo una opción más.
 
 ![Pantalla de inicio de ClipAI](docs/img/inicio.png)
 
 ### Míralo en 1 minuto
 
-[![Video de presentación de ClipAI: de un enlace a doce clips listos para publicar](docs/img/video.jpg)](docs/video/clipai.mp4)
+<video src="https://github.com/HANA0KA/ClipAI/raw/main/docs/video/clipai.mp4" controls muted playsinline width="100%"></video>
 
-*Del enlace a los clips listos para publicar, con capturas reales de la app (56 s, 6 MB; clic para verlo). El material de ejemplo es de un stream ajeno, usado solo para mostrar la herramienta.*
+*Del enlace a los clips listos para publicar, con capturas reales de la app (56 s). El material de ejemplo es de un stream ajeno, usado solo para mostrar la herramienta.*
 
 > ⚠️ Descargar y republicar videos ajenos puede infringir derechos de autor y los términos de las plataformas. Lee el [aviso legal](#aviso-legal-y-uso-responsable) antes de usarlo.
 
@@ -79,12 +79,29 @@ Se usa el primero que esté configurado, en este orden:
 
 | Proveedor | Modelo | Costo | Cómo obtenerlo |
 | --- | --- | --- | --- |
-| **Servidor local** compatible con OpenAI (Ollama, LM Studio) | El que indiques en `LLM_MODEL` (de 7–8B como mínimo) | Gratis, usa tu equipo | Instala [Ollama](https://ollama.com), arráncalo con `OLLAMA_CONTEXT_LENGTH=16384` y define `LLM_BASE_URL` y `LLM_MODEL` |
+| **API compatible con OpenAI** (nube o local) | El que indiques en `LLM_MODEL` | Según el proveedor; con Ollama o LM Studio es gratis y usa tu equipo | Define `LLM_BASE_URL` (termina en `/v1`), `LLM_MODEL` y, si el servicio lo pide, `LLM_API_KEY`. Ejemplos abajo |
 | **Gemini en Vertex AI** | `gemini-3-flash-preview` (respaldo: `gemini-2.5-flash` y otros) | De pago, por uso | Proyecto de Google Cloud con Vertex AI y una cuenta de servicio con el rol «Vertex AI User»: `VERTEX_PROJECT_ID` y `GOOGLE_SERVICE_ACCOUNT_FILE` |
 | **Gemini API (Google AI Studio)** — *lo más sencillo* | `gemini-3-flash-preview` (respaldo: `gemini-2.5-flash` y otros) | Capa gratuita con los límites que fije Google | Crea una clave en <https://aistudio.google.com/apikey> y ponla en `GEMINI_API_KEY` |
 | **Sin IA** (respaldo) | — | Gratis | No configures nada. Elige momentos con heurísticas y señales; los ganchos y títulos son más simples |
 
-Si un modelo está saturado, agotó su cuota o fue retirado, ClipAI prueba el siguiente de la cadena `GEMINI_FALLBACK_MODELS`.
+Si un modelo de Gemini está saturado, agotó su cuota o fue retirado, ClipAI prueba el siguiente de la cadena `GEMINI_FALLBACK_MODELS`.
+
+**Usar otro proveedor de IA (no hace falta Gemini ni Vertex).** Cualquier servicio que exponga `/chat/completions` al estilo OpenAI sirve; basta con tres variables en `.env`:
+
+```env
+# OpenAI
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4.1-mini
+LLM_API_KEY=sk-...
+
+# OpenRouter (un modelo de cualquier proveedor)
+# LLM_BASE_URL=https://openrouter.ai/api/v1
+
+# Groq: https://api.groq.com/openai/v1 · DeepSeek: https://api.deepseek.com/v1
+# Ollama local: http://host.docker.internal:11434/v1 (con Docker) · http://localhost:11434/v1 (sin Docker)
+```
+
+Si el modelo rechaza `temperature` o `response_format`, ClipAI los quita y reintenta solo. Con Ollama o LM Studio usa un modelo de 7–8B como mínimo y, en Ollama, arráncalo con `OLLAMA_CONTEXT_LENGTH=16384`. Probado con Gemini y Ollama; con los demás servicios solo hay compatibilidad por el protocolo. El costo que muestra la interfaz es una estimación con precios de Gemini y sale marcado con «≈» en los otros modelos. Con una API de nube cada análisis envía fragmentos de la transcripción a ese proveedor.
 
 ### Modelos que se ejecutan en tu equipo (se descargan solos la primera vez)
 
@@ -108,7 +125,7 @@ No hace falta una cuenta de Hugging Face. Puedes cambiar el modelo de Whisper co
 
 ```bash
 git clone https://github.com/HANA0KA/ClipAI.git clipai && cd clipai
-cp .env.example .env        # opcional; edítalo y pon tu GEMINI_API_KEY
+cp .env.example .env        # opcional; edítalo y pon tu clave de IA (GEMINI_API_KEY u otro proveedor, ver «IA, modelos y APIs»)
 docker compose up -d --build
 ```
 
@@ -135,7 +152,7 @@ git pull && docker compose up -d --build   # actualizar
 brew install node python@3.11 deno ffmpeg-full
 git clone https://github.com/HANA0KA/ClipAI.git clipai && cd clipai
 cp .env.example .env        # opcional: start.sh lo crea si no existe
-# edita .env y pon tu GEMINI_API_KEY
+# edita .env y pon tu clave de IA (GEMINI_API_KEY u otro proveedor, ver «IA, modelos y APIs»)
 ./start.sh
 ```
 
@@ -181,7 +198,7 @@ Todas las variables están comentadas en [.env.example](.env.example). Las más 
 | `GEMINI_API_KEY` | Gemini API de AI Studio (capa gratuita). También se lee del entorno del shell. |
 | `VERTEX_PROJECT_ID`, `VERTEX_LOCATION`, `GOOGLE_SERVICE_ACCOUNT_FILE` (o `_JSON`) | Gemini en Vertex AI con cuenta de servicio. Tiene prioridad sobre la clave de API. |
 | `GEMINI_MODEL`, `GEMINI_FALLBACK_MODELS` | Cadena de modelos: si uno responde 429/503/404 se prueba el siguiente. |
-| `LLM_BASE_URL`, `LLM_MODEL` | Ollama u otro servidor compatible con OpenAI en lugar de Gemini. |
+| `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | Cualquier API compatible con OpenAI (OpenAI, OpenRouter, Groq, DeepSeek, Ollama…) en lugar de Gemini. Tiene prioridad sobre Vertex y sobre `GEMINI_API_KEY`. |
 | `WHISPER_MODEL`, `WHISPER_DEVICE` | `large-v3-turbo` + `cpu` por defecto; `small` si tienes poca RAM; `large-v3` + `cuda` con GPU NVIDIA. |
 | `MAX_CLIPS`, `CLIP_MIN_SEC`, `CLIP_MAX_SEC` | Cuántos clips y entre qué duraciones (60–150 s; 150 s = 2:30 es el máximo absoluto). |
 | `AUTO_COLD_OPEN` | Abrir con un avance de 2–5 s de la frase más fuerte cuando el inicio natural es flojo. |

@@ -1,4 +1,4 @@
-"""Cliente LLM: Gemini con cadena de modelos, u OpenAI-compatible (Ollama).
+"""Cliente LLM: Gemini con cadena de modelos, u cualquier API compatible con OpenAI.
 
 La cadena de modelos y la clasificación de errores están adaptadas de
 ClipPyMe — https://github.com/fralapo/clippyme
@@ -184,6 +184,17 @@ def _response_text(resp) -> str:
             if getattr(part, "text", None):
                 parts.append(part.text)
     return "\n".join(parts)
+
+
+def _drop_rejected_params(body: dict, detail: str) -> bool:
+    """Quita de ``body`` los parámetros opcionales que el servidor dice no admitir
+    (p. ej. ``temperature`` en los modelos de razonamiento de OpenAI o
+    ``response_format`` en algunos servidores compatibles). True si quitó alguno."""
+    detail = detail.lower()
+    dropped = [k for k in ("temperature", "response_format") if k in body and k in detail]
+    for k in dropped:
+        del body[k]
+    return bool(dropped)
 
 
 def _is_local_url(url: str) -> bool:
@@ -395,7 +406,10 @@ class LLM:
             try:
                 r = httpx.post(f"{s.llm_base_url}/chat/completions", headers=headers,
                                content=json.dumps(body), timeout=600)
-                r.raise_for_status()
+                if r.status_code == 400 and _drop_rejected_params(body, r.text):
+                    continue  # el modelo no admite esos parámetros: se reintenta sin ellos
+                if r.is_error:
+                    raise RuntimeError(f"{r.status_code} {r.reason_phrase}: {r.text[:300]}")
                 self.last_model = s.llm_model
                 data = r.json()
                 usage = data.get("usage") or {}

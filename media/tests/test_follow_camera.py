@@ -127,3 +127,54 @@ def test_gemini_config_per_model(monkeypatch):
     assert inst.generate_list("p", Item, temperature=0.2)[0].a == 1
     assert seen[0][:2] == ("gemini-3-flash-preview", None) and seen[-1][:2] == ("gemini-2.5-flash", 0.2)
     assert all(s[2] == L.SYSTEM_INSTRUCTION for s in seen)
+
+
+def test_openai_compatible_drops_params_the_model_rejects(monkeypatch):
+    """Un modelo que rechaza `temperature`/`response_format` se reintenta sin ellos."""
+    import httpx
+
+    from media.services import llm as L
+
+    sent = []
+
+    def fake_post(url, headers, content, timeout):
+        import json
+        body = json.loads(content)
+        sent.append(body)
+        req = httpx.Request("POST", url)
+        if "temperature" in body:
+            return httpx.Response(400, text='{"error": {"message": "Unsupported value: temperature"}}', request=req)
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"items": []}'}}],
+                                         "usage": {"prompt_tokens": 3, "completion_tokens": 2}}, request=req)
+
+    class S:
+        llm_base_url, llm_model, llm_api_key = "https://api.example.com/v1", "o-model", "sk-test"
+
+    monkeypatch.setattr(L, "settings", lambda: S)
+    monkeypatch.setattr(L.httpx, "post", fake_post)
+    inst = L.LLM.__new__(L.LLM)
+    inst.provider, inst.models = "openai", ["o-model"]
+    inst.last_model, inst.usage, inst.sleep = None, L.new_usage(), lambda s: None
+    assert inst._openai_generate("p", "items", 0.2) == '{"items": []}'
+    assert "temperature" in sent[0] and "temperature" not in sent[1] and "response_format" in sent[1]
+    assert inst.usage["calls"] == 1 and inst.usage["cost_usd"] > 0
+
+
+def test_openai_compatible_http_error_keeps_the_server_message(monkeypatch):
+    import httpx
+    import pytest
+
+    from media.services import llm as L
+
+    def fake_post(url, headers, content, timeout):
+        return httpx.Response(401, text="Incorrect API key provided", request=httpx.Request("POST", url))
+
+    class S:
+        llm_base_url, llm_model, llm_api_key = "https://api.example.com/v1", "m", "bad"
+
+    monkeypatch.setattr(L, "settings", lambda: S)
+    monkeypatch.setattr(L.httpx, "post", fake_post)
+    inst = L.LLM.__new__(L.LLM)
+    inst.last_model, inst.usage, inst.sleep = None, L.new_usage(), lambda s: None
+    with pytest.raises(L.LLMError, match="Incorrect API key"):
+        inst._openai_generate("p", "items")
